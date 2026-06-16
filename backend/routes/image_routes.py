@@ -87,8 +87,21 @@ def create_image_blueprint():
                     yield f"event: {event_type}\n"
                     yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
+            def generate_with_sync():
+                """SSE 事件生成器 + 完成后同步历史记录"""
+                yield from generate()
+                # 图片全部生成完成后，同步历史记录
+                if task_id:
+                    try:
+                        from backend.services.history import get_history_service
+                        history_service = get_history_service()
+                        result = history_service.scan_and_sync_task_images(task_id)
+                        logger.info(f"历史记录同步完成: task={task_id}, synced={result.get('success')}")
+                    except Exception as e:
+                        logger.error(f"历史记录同步失败: task={task_id}, error={e}")
+
             return Response(
-                generate(),
+                generate_with_sync(),
                 mimetype='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
