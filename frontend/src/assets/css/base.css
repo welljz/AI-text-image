@@ -1,0 +1,237 @@
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+/* 科技网格背景 */
+body::before { display: none; }
+[data-theme="dark"] body::before { display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 229, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+/* 布局组件类 */
+.layout-sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-sidebar);
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-right: 1px solid var(--border-color);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: all 0.3s ease;
+  box-shadow: 2px 0 40px rgba(0, 0, 0, 0.3);
+}
+
+.layout-main {
+  margin-left: var(--sidebar-width);
+  flex: 1;
+  padding: 40px 60px;
+  min-height: 100vh;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Logo 区域 */
+.logo-area {
+  display: flex;
+  align-items: center;
+  margin-bottom: 48px;
+}
+
+.logo-icon {
+  display: none;
+}
+
+.logo-text-glow {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, #00e5ff 0%, #00b8d4 50%, #18ffff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 40px rgba(0, 229, 255, 0.4);
+  user-select: none;
+}
+
+/* 导航菜单 */
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  color: var(--text-sub);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  font-size: 15px;
+  border: 1px solid transparent;
+}
+
+.nav-item:hover {
+  background: rgba(0, 229, 255, 0.05);
+  color: var(--primary);
+  border-color: rgba(0, 229, 255, 0.15);
+}
+
+.nav-item.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: rgba(0, 229, 255, 0.2);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.08);
+}
+
+/* 通用容器 */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* 标题排版 */
+.page-header {
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.page-title { color: var(--text-main); }
+[data-theme="dark"] .page-title {  }
+.page-title-dark-fallback {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 12px;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, #e0e6f0 0%, #00e5ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.page-subtitle {
+  font-size: 18px;
+  color: var(--text-sub);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 全局页脚 */
+.global-footer {
+  margin-top: 80px;
+  padding: 32px 0 24px;
+  border-top: 1px solid var(--border-color);
+  background: transparent;
+}
+
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-tip {
+  font-size: 14px;
+  color: var(--text-sub);
+  margin-bottom: 4px;
+}
+
+.footer-tip a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.footer-tip a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.footer-text {
+  font-size: 14px;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+.footer-text a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.footer-text a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.footer-license {
+  font-size: 13px;
+  color: var(--text-placeholder);
+}
+
+.footer-license a {
+  color: var(--text-sub);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.footer-license a:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
