@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-#  红墨 AI图文生成器 — 一键安装脚本
+#  AI图文创作 — 一键安装脚本
 #  用法: curl -fsSL <raw-url> | sudo bash
 #  适配: Ubuntu 20.04+ / Debian 11+
 # ============================================================
@@ -33,7 +33,7 @@ fi
 
 echo -e "${CYAN}"
 echo "  ╔══════════════════════════════════╗"
-echo "  ║   红墨 AI图文生成器  一键安装   ║"
+echo "  ║     AI图文创作  一键安装          ║"
 echo "  ╚══════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -204,7 +204,7 @@ info "配置 systemd 服务..."
 UV_BIN=$(which uv || echo "/root/.local/bin/uv")
 cat > "$SYSTEMD_SERVICE" << SYSTEMDEOF
 [Unit]
-Description=RedInk AI Image Generator
+Description=AI Image Generator
 After=network.target
 
 [Service]
