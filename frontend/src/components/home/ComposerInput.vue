@@ -41,44 +41,8 @@
     </div>
 
     
-    <!-- 已上传图片预览 -->
-    <div v-if="uploadedImages.length > 0" class="uploaded-images-preview">
-      <div
-        v-for="(img, idx) in uploadedImages"
-        :key="idx"
-        class="uploaded-image-item"
-      >
-        <img :src="img.preview" :alt="`图片 ${idx + 1}`" />
-        <button class="remove-image-btn" @click="removeImage(idx)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <div class="upload-hint">这些图片将用于生成封面和内容参考</div>
-    </div>
-
-    <!-- 工具栏 -->
+<!-- 工具栏 -->
     <div class="composer-toolbar">
-      <div class="toolbar-left">
-        <label class="tool-btn" :class="{ 'active': uploadedImages.length > 0 }" title="上传参考图">
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            @change="handleImageUpload"
-            :disabled="loading"
-            style="display: none;"
-          />
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-            <polyline points="21 15 16 10 5 21"></polyline>
-          </svg>
-          <span v-if="uploadedImages.length > 0" class="badge-count">{{ uploadedImages.length }}</span>
-        </label>
-      </div>
       <div class="toolbar-right">
         <button
           class="btn btn-primary generate-btn"
@@ -94,12 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue'
-
-interface UploadedImage {
-  file: File
-  preview: string
-}
+import { ref } from 'vue'
 
 const props = defineProps<{
   modelValue: string
@@ -109,22 +68,20 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'generate'): void
-  (e: 'imagesChange', images: File[]): void
   (e: 'update:pageCount', value: number): void
   (e: 'update:style', value: string): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const uploadedImages = ref<UploadedImage[]>([])
-const pageCount = ref(8)
+const pageCount = ref(4)
 
 const styleOptions = [
   { label: '不限', value: '' },
-  { label: '3D黏土风', value: '温暖治愈的3D黏土Claymorphic风格，圆润可爱的立体造型，柔和光影' },
-  { label: '日系清新', value: '日系清新风格，明亮自然光，低饱和度暖色调，简约干净' },
-  { label: '科技极简', value: '科技极简风格，深色背景，霓虹青色光效，线条硬朗' },
-  { label: '国潮复古', value: '国潮复古风格，中式传统配色，红金搭配，水墨质感' },
-  { label: '扁平插画', value: '扁平化插画风格，色块分明，线条简洁，现代感' },
+  { label: '3D黏土风', value: '3D黏土风格，温暖治愈，柔和质感' },
+  { label: '日系清新', value: '日系清新风格，明亮通透，简约干净' },
+  { label: '科技极简', value: '科技极简风格，深色基调，利落干净' },
+  { label: '国潮复古', value: '国潮复古风格，中式典雅，沉稳大气' },
+  { label: '扁平插画', value: '扁平插画风格，色块简洁，现代利落' },
 ]
 const selectedStyle = ref('')
 function selectStyle(v: string) {
@@ -164,37 +121,6 @@ function adjustHeight() {
   el.style.height = Math.max(64, Math.min(el.scrollHeight, 200)) + 'px'
 }
 
-function handleImageUpload(event: Event) {
-  const target = event.target as HTMLInputElement
-  if (!target.files) return
-  const files = Array.from(target.files)
-  files.forEach((file) => {
-    if (uploadedImages.value.length >= 5) return
-    uploadedImages.value.push({ file, preview: URL.createObjectURL(file) })
-  })
-  emitImagesChange()
-  target.value = ''
-}
-
-function removeImage(index: number) {
-  const img = uploadedImages.value[index]
-  URL.revokeObjectURL(img.preview)
-  uploadedImages.value.splice(index, 1)
-  emitImagesChange()
-}
-
-function emitImagesChange() {
-  emit('imagesChange', uploadedImages.value.map(img => img.file))
-}
-
-function clearPreviews() {
-  uploadedImages.value.forEach(img => URL.revokeObjectURL(img.preview))
-  uploadedImages.value = []
-}
-
-onUnmounted(() => clearPreviews())
-
-defineExpose({ clearPreviews })
 </script>
 
 <style scoped>
@@ -290,67 +216,11 @@ defineExpose({ clearPreviews })
   font-variant-numeric: tabular-nums;
 }
 
-/* 已上传图片预览 */
-.uploaded-images-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 8px;
-  padding: 16px;
-  background: rgba(255,255,255,0.03);
-  border-radius: 12px;
-  align-items: center;
-}
-
-.uploaded-image-item {
-  position: relative;
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.uploaded-image-item img { width: 100%; height: 100%; object-fit: cover; }
-
-.remove-image-btn {
-  position: absolute; top: 2px; right: 2px;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6); border: none;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  color: white; opacity: 0; transition: opacity 0.2s;
-}
-
-.uploaded-image-item:hover .remove-image-btn { opacity: 1; }
-.remove-image-btn:hover { background: var(--primary); }
-
-.upload-hint { flex: 1; font-size: 12px; color: var(--text-sub); text-align: right; }
-
 /* 工具栏 */
 .composer-toolbar {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: flex-end; align-items: center;
   margin-top: 12px; padding-top: 12px;
   border-top: 1px solid var(--border-color);
-}
-
-.toolbar-left { display: flex; gap: 8px; }
-
-.tool-btn {
-  display: flex; align-items: center; justify-content: center; position: relative;
-  width: 40px; height: 40px; border-radius: 10px;
-  background: rgba(255,255,255,0.04); border: none; cursor: pointer;
-  color: var(--text-sub); transition: all 0.2s;
-}
-
-.tool-btn:hover { background: rgba(255,255,255,0.06); color: var(--primary); }
-.tool-btn.active { background: rgba(0, 229, 255, 0.08); color: var(--primary); }
-
-.badge-count {
-  position: absolute; top: -4px; right: -4px;
-  min-width: 18px; height: 18px;
-  background: var(--primary); color: #080c14;
-  border-radius: 9px; font-size: 11px; font-weight: 600;
-  display: flex; align-items: center; justify-content: center; padding: 0 4px;
 }
 
 .generate-btn { padding: 10px 24px; font-size: 15px; border-radius: 100px; display: flex; align-items: center; gap: 8px; }

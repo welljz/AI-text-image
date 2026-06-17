@@ -57,14 +57,14 @@ RUN mkdir -p output history
 # 设置环境变量
 ENV FLASK_DEBUG=False
 ENV FLASK_HOST=0.0.0.0
-ENV FLASK_PORT=12398
+ENV FLASK_PORT=50123
 
 # 暴露端口
-EXPOSE 12398
+EXPOSE 50123
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:12398/api/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:50123/api/health')" || exit 1
 
 # 启动命令
 CMD ["uv", "run", "python", "-m", "backend.app"]

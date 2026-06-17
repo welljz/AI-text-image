@@ -47,9 +47,9 @@
 
       <!-- 图片网格 -->
       <div class="modal-gallery-grid">
-        <div v-for="(img, idx) in record.images.generated" :key="idx" class="modal-img-item">
-          <div v-if="img" @click="lightboxSrc = '/api/images/' + record.images.task_id + '/' + img + '?t=' + imgVersion" class="modal-img-preview" :class="{ 'regenerating': regeneratingImages.has(idx) }">
-            <img :src="`/api/images/${record.images.task_id}/${img}?t=${imgVersion}`" loading="lazy" decoding="async"
+        <div v-for="(img, idx) in (record.images?.generated || [])" :key="idx" class="modal-img-item">
+          <div v-if="img" @click="lightboxSrc = '/api/images/' + record.images?.task_id + '/' + img + '?t=' + imgVersion" class="modal-img-preview" :class="{ 'regenerating': regeneratingImages.has(idx) }">
+            <img :src="`/api/images/${record.images?.task_id}/${img}?t=${imgVersion}`" loading="lazy" decoding="async"
                />
             <div class="modal-img-overlay">
               <button class="modal-overlay-btn" @click.stop="$emit('regenerate', idx)" :disabled="regeneratingImages.has(idx)">

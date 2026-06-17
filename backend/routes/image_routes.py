@@ -418,10 +418,25 @@ def create_image_blueprint():
         try:
             from backend.services.history import get_history_service
 
-            data = request.get_json()
-            prompt = data.get('prompt', '').strip()
-            aspect_ratio = data.get('aspect_ratio', '1:1')
-            quality = data.get('quality', None)  # None 表示用配置默认值
+            # 支持 multipart/form-data（有参考图）和 JSON（无参考图）
+            if request.content_type and 'multipart' in request.content_type:
+                prompt = request.form.get('prompt', '').strip()
+                aspect_ratio = request.form.get('aspect_ratio', '1:1')
+                quality = request.form.get('quality', None)
+                # 读取上传的图片
+                user_images = []
+                uploaded_files = request.files.getlist('images')
+                for f in uploaded_files:
+                    if f.filename:
+                        user_images.append(f.read())
+                if not user_images:
+                    user_images = None
+            else:
+                data = request.get_json()
+                prompt = data.get('prompt', '').strip()
+                aspect_ratio = data.get('aspect_ratio', '1:1')
+                quality = data.get('quality', None)
+                user_images = None
 
             if not prompt:
                 return jsonify({
@@ -429,11 +444,12 @@ def create_image_blueprint():
                     "error": "参数错误：prompt 不能为空。\n请输入图片描述。"
                 }), 400
 
-            logger.info(f"🎨 快速生图: prompt={prompt[:80]}... ratio={aspect_ratio} quality={quality or 'default'}")
+            image_count = len(user_images) if user_images else 0
+            logger.info(f"🎨 快速生图: prompt={prompt[:80]}... ratio={aspect_ratio} quality={quality or 'default'} images={image_count}")
 
             # 生成图片
             image_service = get_image_service()
-            result = image_service.generate_text2img(prompt, aspect_ratio=aspect_ratio, quality=quality)
+            result = image_service.generate_text2img(prompt, aspect_ratio=aspect_ratio, quality=quality, user_images=user_images)
 
             if not result["success"]:
                 return jsonify({

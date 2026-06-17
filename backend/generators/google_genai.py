@@ -368,17 +368,12 @@ class GoogleGenAIGenerator(ImageGeneratorBase):
                     data=compressed_ref
                 )
             ))
-            # 添加带参考说明的提示词
-            enhanced_prompt = f"""请参考上面这张图片的视觉风格（包括配色、排版风格、字体风格、装饰元素风格），生成一张风格一致的新图片。
+            # prompt 已包含页面专属 visual_prompt，参考风格仅为辅助约束
+            enhanced_prompt = f"""{prompt}
 
-新图片的内容要求：
-{prompt}
-
-重要：
-1. 必须保持与参考图相同的视觉风格和设计语言
-2. 配色方案要与参考图协调一致
-3. 排版和装饰元素的风格要统一
-4. 但内容要按照新的要求来生成"""
+<风格连贯性约束>
+与参考图保持一致：配色方案、排版风格、装饰元素风格、设计语言。勿改变上述内容的主体构图和元素。
+</风格连贯性约束>"""
             parts.append(types.Part(text=enhanced_prompt))
         else:
             # 没有参考图，直接使用原始提示词

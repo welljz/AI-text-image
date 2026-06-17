@@ -286,7 +286,7 @@ def _test_provider_connection(provider_type: str, config: dict) -> dict:
     Returns:
         dict: 测试结果
     """
-    test_prompt = "请回复'你好，红墨'"
+    test_prompt = "请回复'你好，创作者'"
 
     if provider_type == 'google_genai':
         return _test_google_genai(config)

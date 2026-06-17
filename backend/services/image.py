@@ -197,63 +197,87 @@ class ImageService:
         page_type = page["type"]
         page_content = page["content"]
 
-        try:
-            logger.debug(f"生成图片 [{index}]: type={page_type}")
+        # 连接层错误自动重试（最多 2 次），不消耗 token
+        MAX_RETRIES = 2
+        last_error = None
 
-            provider_type = self.provider_config.get('type', '')
-            text_content = page.get('content') or page_content
-            style = page.get('visual_prompt', '') or page.get('style', '') or self.provider_config.get('style', '简约现代')
-            prompt = self._build_image_prompt(text_content, page_type, style, full_outline, provider_type)
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                if attempt > 0:
+                    logger.info(f"  [重试 {attempt}/{MAX_RETRIES}] 图片 [{index}]")
+                else:
+                    logger.debug(f"生成图片 [{index}]: type={page_type}")
 
-            # 调用生成器生成图片
-            if self.provider_config.get('type') == 'google_genai':
-                logger.debug(f"  使用 Google GenAI 生成器")
-                image_data = self.generator.generate_image(
-                    prompt=prompt,
-                    aspect_ratio=self.provider_config.get('default_aspect_ratio', '3:4'),
-                    temperature=self.provider_config.get('temperature', 1.0),
-                    model=self.provider_config.get('model', 'gemini-3-pro-image-preview'),
-                    reference_image=reference_image,
-                )
-            elif self.provider_config.get('type') == 'image_api':
-                logger.debug(f"  使用 Image API 生成器")
-                # Image API 支持多张参考图片
-                # 组合参考图片：用户上传的图片 + 封面图
-                reference_images = []
-                if user_images:
-                    reference_images.extend(user_images)
-                if reference_image:
-                    reference_images.append(reference_image)
+                provider_type = self.provider_config.get('type', '')
+                text_content = page.get('content') or page_content
+                style = page.get('visual_prompt', '') or page.get('style', '') or self.provider_config.get('style', '简约现代')
+                prompt = self._build_image_prompt(text_content, page_type, style, full_outline, provider_type)
 
-                image_data = self.generator.generate_image(
-                    prompt=prompt,
-                    aspect_ratio=self.provider_config.get('default_aspect_ratio', '3:4'),
-                    temperature=self.provider_config.get('temperature', 1.0),
-                    model=self.provider_config.get('model', 'nano-banana-2'),
-                    reference_images=reference_images if reference_images else None,
-                )
-            else:
-                logger.debug(f"  使用 OpenAI 兼容生成器")
-                image_data = self.generator.generate_image(
-                    prompt=prompt,
-                    size=self.provider_config.get('default_size', '1024x1024'),
-                    model=self.provider_config.get('model'),
-                    quality=self.provider_config.get('quality', 'standard'),
-                )
+                # 调用生成器生成图片
+                if self.provider_config.get('type') == 'google_genai':
+                    logger.debug(f"  使用 Google GenAI 生成器")
+                    image_data = self.generator.generate_image(
+                        prompt=prompt,
+                        aspect_ratio=self.provider_config.get('default_aspect_ratio', '3:4'),
+                        temperature=self.provider_config.get('temperature', 1.0),
+                        model=self.provider_config.get('model', 'gemini-3-pro-image-preview'),
+                        reference_image=reference_image,
+                    )
+                elif self.provider_config.get('type') == 'image_api':
+                    logger.debug(f"  使用 Image API 生成器")
+                    # Image API 支持多张参考图片
+                    # 组合参考图片：用户上传的图片 + 封面图
+                    reference_images = []
+                    if user_images:
+                        reference_images.extend(user_images)
+                    if reference_image:
+                        reference_images.append(reference_image)
 
-            # 保存图片（使用当前任务目录）
-            filename = f"{index}.png"
-            self._save_image(image_data, filename, self.current_task_dir)
-            logger.info(f"✅ 图片 [{index}] 生成成功: {filename}")
+                    image_data = self.generator.generate_image(
+                        prompt=prompt,
+                        aspect_ratio=self.provider_config.get('default_aspect_ratio', '3:4'),
+                        temperature=self.provider_config.get('temperature', 1.0),
+                        model=self.provider_config.get('model', 'nano-banana-2'),
+                        reference_images=reference_images if reference_images else None,
+                    )
+                else:
+                    logger.debug(f"  使用 OpenAI 兼容生成器")
+                    image_data = self.generator.generate_image(
+                        prompt=prompt,
+                        size=self.provider_config.get('default_size', '1024x1024'),
+                        model=self.provider_config.get('model'),
+                        quality=self.provider_config.get('quality', 'standard'),
+                    )
 
-            return (index, True, filename, None)
+                # 保存图片（使用当前任务目录）
+                filename = f"{index}.png"
+                self._save_image(image_data, filename, self.current_task_dir)
+                logger.info(f"✅ 图片 [{index}] 生成成功: {filename}")
 
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"❌ 图片 [{index}] 生成失败: {error_msg[:200]}")
-            return (index, False, None, error_msg)
+                return (index, True, filename, None)
 
-    def generate_text2img(self, prompt: str, task_id: str = None, task_dir: str = None, aspect_ratio: str = "1:1", quality: str = None) -> Dict[str, Any]:
+            except Exception as e:
+                error_msg = str(e)
+                last_error = error_msg
+
+                # 判断是否为连接层错误（可重试）
+                is_connection_error = any(kw in error_msg.lower() for kw in [
+                    'connection aborted', 'remotedisconnected', 'connectionerror',
+                    'connection reset', 'broken pipe', 'protocolerror',
+                ])
+
+                if is_connection_error and attempt < MAX_RETRIES:
+                    logger.warning(f"  [重试 {attempt + 1}/{MAX_RETRIES}] 连接错误: {error_msg[:120]}")
+                    import time
+                    time.sleep(1)  # 短暂等待后重试
+                    continue
+
+                logger.error(f"❌ 图片 [{index}] 生成失败: {error_msg[:200]}")
+                break
+
+        return (index, False, None, last_error)
+
+    def generate_text2img(self, prompt: str, task_id: str = None, task_dir: str = None, aspect_ratio: str = "1:1", quality: str = None, user_images: Optional[List[bytes]] = None) -> Dict[str, Any]:
         """
         快速生图：直接将用户提示词传给生图 API，不经过模板包装
 
@@ -263,6 +287,7 @@ class ImageService:
             task_dir: 任务目录（可选）
             aspect_ratio: 宽高比 "1:1" | "3:4" | "16:9" | "9:16"（默认 1:1）
             quality: 图片质量 "standard" | "hd"（默认从配置读取）
+            user_images: 用户上传的参考图片（可选）
 
         Returns:
             { "success": bool, "filename": str | None, "error": str | None }
@@ -290,6 +315,7 @@ class ImageService:
                     temperature=self.provider_config.get('temperature', 1.0),
                     model=self.provider_config.get('model'),
                     quality=quality,
+                    reference_images=user_images,
                 )
             else:
                 # OpenAI 兼容：比例 → size 映射

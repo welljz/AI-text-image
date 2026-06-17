@@ -30,11 +30,9 @@
         </div>
 
         <ComposerInput
-          ref="composerRef"
           v-model="topic"
           :loading="loading"
           @generate="handleGenerate"
-          @imagesChange="handleImagesChange"
           @update:pageCount="pageCount = $event"
           @update:style="imgStyle = $event"
         />
@@ -60,6 +58,34 @@
             :disabled="quickLoading"
             @keydown.ctrl.enter="handleQuickGenerate"
           ></textarea>
+
+          <!-- 参考图片上传 -->
+          <div class="quick-image-upload">
+            <div class="quick-image-previews" v-if="quickImagePreviews.length > 0">
+              <div v-for="(img, idx) in quickImagePreviews" :key="idx" class="quick-image-item">
+                <img :src="img.preview" :alt="`参考图 ${idx + 1}`" />
+                <button class="quick-image-remove" @click="removeQuickImage(idx)">×</button>
+              </div>
+            </div>
+            <label class="quick-upload-btn" :class="{ active: quickImageFiles.length > 0 }">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                @change="handleQuickImageUpload"
+                :disabled="quickLoading"
+                style="display: none;"
+              />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <span>上传参考图</span>
+              <span v-if="quickImageFiles.length > 0" class="quick-badge">{{ quickImageFiles.length }}</span>
+            </label>
+          </div>
+
           <div class="quick-actions">
             <div class="quick-selectors">
               <div class="ratio-selector">
@@ -152,14 +178,8 @@ const activeTab = ref<'rednote' | 'quick'>('rednote')
 // --- 小红书图文 ---
 const topic = ref('')
 const loading = ref(false)
-const composerRef = ref<InstanceType<typeof ComposerInput> | null>(null)
-const uploadedImageFiles = ref<File[]>([])
-const pageCount = ref(8)
+const pageCount = ref(4)
 const imgStyle = ref('')
-
-function handleImagesChange(images: File[]) {
-  uploadedImageFiles.value = images
-}
 
 async function handleGenerate() {
   if (!topic.value.trim()) return
@@ -168,11 +188,8 @@ async function handleGenerate() {
   errorMsg.value = ''
 
   try {
-    const imageFiles = uploadedImageFiles.value
-
     const result = await generateOutline(
       topic.value.trim(),
-      imageFiles.length > 0 ? imageFiles : undefined,
       pageCount.value,
       imgStyle.value || undefined
     )
@@ -200,15 +217,6 @@ async function handleGenerate() {
         console.error('创建历史记录异常:', err.message || err)
         store.setRecordId(null)
       }
-
-      if (imageFiles.length > 0) {
-        store.userImages = imageFiles
-      } else {
-        store.userImages = []
-      }
-
-      composerRef.value?.clearPreviews()
-      uploadedImageFiles.value = []
 
       router.push('/outline')
     } else {
@@ -240,6 +248,28 @@ const qualityOptions = [
   { label: '高清', value: 'high' },
 ]
 
+// --- 快速生图 图片上传 ---
+interface QuickImageItem { file: File; preview: string }
+const quickImageFiles = ref<File[]>([])
+const quickImagePreviews = ref<QuickImageItem[]>([])
+
+function handleQuickImageUpload(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (!target.files) return
+  Array.from(target.files).forEach((file) => {
+    if (quickImageFiles.value.length >= 5) return
+    quickImageFiles.value.push(file)
+    quickImagePreviews.value.push({ file, preview: URL.createObjectURL(file) })
+  })
+  target.value = ''
+}
+
+function removeQuickImage(index: number) {
+  URL.revokeObjectURL(quickImagePreviews.value[index].preview)
+  quickImagePreviews.value.splice(index, 1)
+  quickImageFiles.value.splice(index, 1)
+}
+
 async function handleQuickGenerate() {
   if (!quickPrompt.value.trim() || quickLoading.value) return
 
@@ -248,7 +278,8 @@ async function handleQuickGenerate() {
   quickResult.value = ''
 
   try {
-    const result = await text2img(quickPrompt.value.trim(), quickRatio.value, quickQuality.value)
+    const imgFiles = quickImageFiles.value.length > 0 ? quickImageFiles.value : undefined
+    const result = await text2img(quickPrompt.value.trim(), quickRatio.value, quickQuality.value, imgFiles)
     if (result.success && result.image_url) {
       quickResult.value = result.image_url
     } else {
@@ -272,6 +303,9 @@ function downloadQuickImage() {
 function resetQuick() {
   quickResult.value = ''
   quickPrompt.value = ''
+  quickImagePreviews.value.forEach(img => URL.revokeObjectURL(img.preview))
+  quickImagePreviews.value = []
+  quickImageFiles.value = []
 }
 </script>
 
@@ -587,5 +621,89 @@ function resetQuick() {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* 快速生图 图片上传 */
+.quick-image-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.quick-image-previews {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.quick-image-item {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+.quick-image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.quick-image-remove {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.quick-image-item:hover .quick-image-remove {
+  opacity: 1;
+}
+.quick-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all .15s;
+  user-select: none;
+}
+.quick-upload-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+.quick-upload-btn.active {
+  border-style: solid;
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: var(--accent-bg);
+}
+.quick-badge {
+  background: var(--accent-color);
+  color: #fff;
+  font-size: 11px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
 }
 </style>

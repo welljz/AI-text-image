@@ -23,22 +23,22 @@ cover | checklist | comparison | steps | pitfall | ranking | summary
     {{
       "type": "checklist",
       "text_content": "## 标题\\n- 要点1\\n- 要点2\\n- 要点3\\n- 要点4",
-      "visual_prompt": "延续封面风格"
+      "visual_prompt": "科技极简风格"
     }},
     {{
       "type": "comparison",
       "text_content": "## 标题\\n**对比维度：** xxx\\n- ❌ 方案A：xxx\\n- ✅ 方案B：xxx",
-      "visual_prompt": "延续封面风格"
+      "visual_prompt": "科技极简风格"
     }},
     {{
       "type": "steps",
       "text_content": "## 标题\\n1. 步骤1详情\\n2. 步骤2详情\\n3. 步骤3详情\\n4. 步骤4详情",
-      "visual_prompt": "延续封面风格"
+      "visual_prompt": "科技极简风格"
     }},
     {{
       "type": "summary",
       "text_content": "## 总结\\n**行动号召：** xxx",
-      "visual_prompt": "延续封面风格"
+      "visual_prompt": "科技极简风格"
     }}
   ]
 }}
@@ -47,6 +47,5 @@ cover | checklist | comparison | steps | pitfall | ranking | summary
 ## 规则
 - 3-10 页，每行 ≤25 字
 - text_content 用 Markdown：# 标题、## 副标题、- 列表、**粗体**
-- 封面 visual_prompt：从视觉风格描述中提取风格名称（如"科技极简风格"），不包含具体色彩/元素描述，不超过10字
-- 非封面 visual_prompt：写"延续封面风格"即可
+- 所有页面 visual_prompt 统一使用用户选定的视觉风格（{style}），不加修改、不添加任何额外描述
 - 直接输出 JSON，无额外文字

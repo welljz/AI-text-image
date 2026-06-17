@@ -30,37 +30,12 @@ export interface FinishEvent {
   images: string[]
 }
 
-// 生成大纲（支持图片上传）
+// 生成大纲
 export async function generateOutline(
   topic: string,
-  images?: File[],
   pageCount?: number,
   style?: string
 ): Promise<OutlineResponse & { has_images?: boolean }> {
-  // 如果有图片，使用 FormData
-  if (images && images.length > 0) {
-    const formData = new FormData()
-    formData.append('topic', topic)
-    formData.append('page_count', String(pageCount || 8))
-    if (style) formData.append('style', style)
-    if (style) formData.append('style', style)
-    images.forEach((file) => {
-      formData.append('images', file)
-    })
-
-    const response = await axios.post<OutlineResponse & { has_images?: boolean }>(
-      `${API_BASE_URL}/outline`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      }
-    )
-    return response.data
-  }
-
-  // 无图片，使用 JSON
   const response = await axios.post<OutlineResponse>(`${API_BASE_URL}/outline`, {
     topic,
     page_count: pageCount || 8,
@@ -830,8 +805,21 @@ export interface Text2ImgResponse {
   error?: string
 }
 
-// 快速生图：直接将提示词传给生图 API
-export async function text2img(prompt: string, aspectRatio?: string, quality?: string): Promise<Text2ImgResponse> {
+// 快速生图：直接将提示词传给生图 API，可选上传参考图
+export async function text2img(prompt: string, aspectRatio?: string, quality?: string, images?: File[]): Promise<Text2ImgResponse> {
+  // 有图片用 FormData
+  if (images && images.length > 0) {
+    const formData = new FormData()
+    formData.append('prompt', prompt)
+    formData.append('aspect_ratio', aspectRatio || '1:1')
+    if (quality) formData.append('quality', quality)
+    images.forEach(file => formData.append('images', file))
+    const response = await axios.post<Text2ImgResponse>(`${API_BASE_URL}/text2img`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return response.data
+  }
+  // 无图片用 JSON
   const response = await axios.post<Text2ImgResponse>(`${API_BASE_URL}/text2img`, {
     prompt,
     aspect_ratio: aspectRatio || '1:1',

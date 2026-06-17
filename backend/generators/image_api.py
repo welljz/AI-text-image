@@ -30,6 +30,8 @@ class ImageApiGenerator(ImageGeneratorBase):
         self.quality = config.get('quality')
         # 水印：默认不发送（由 API 决定），配置后可显式设置
         self.watermark = config.get('watermark')
+        # 是否支持参考图（image 参数），默认关闭避免 Unknown parameter 错误
+        self.support_reference_image = config.get('support_reference_image', False)
 
         # 支持自定义端点路径
         endpoint_type = config.get('endpoint_type', '/v1/images/generations')
@@ -147,30 +149,31 @@ class ImageApiGenerator(ImageGeneratorBase):
         if reference_image and reference_image not in all_reference_images:
             all_reference_images.append(reference_image)
 
-        # 如果有参考图片，添加到 image 数组
+        # 如果有参考图片，根据 provider 配置决定是否传 image 参数
         if all_reference_images:
             logger.debug(f"  添加 {len(all_reference_images)} 张参考图片")
-            image_uris = []
-            for idx, img_data in enumerate(all_reference_images):
-                compressed_img = compress_image(img_data, max_size_kb=200)
-                logger.debug(f"  参考图 {idx}: {len(img_data)} -> {len(compressed_img)} bytes")
-                base64_image = base64.b64encode(compressed_img).decode('utf-8')
-                data_uri = f"data:image/png;base64,{base64_image}"
-                image_uris.append(data_uri)
 
-            payload["image"] = image_uris
+            # 压缩第一张参考图
+            compressed_img = compress_image(all_reference_images[0], max_size_kb=200)
+            base64_image = base64.b64encode(compressed_img).decode('utf-8')
+            data_uri = f"data:image/png;base64,{base64_image}"
 
             ref_count = len(all_reference_images)
-            enhanced_prompt = f"""参考提供的 {ref_count} 张图片的风格（色彩、光影、构图、氛围），生成一张新图片。
+            # prompt 已包含页面专属 visual_prompt，参考风格仅为辅助约束
+            enhanced_prompt = f"""{prompt}
 
-新图片内容：{prompt}
+<风格连贯性约束>
+与参考图（共{ref_count}张）保持一致：色调、光影质感、画面氛围。勿改变上述内容的主体构图和元素。
+</风格连贯性约束>"""
 
-要求：
-1. 保持相似的色调和氛围
-2. 使用相似的光影处理
-3. 保持一致的画面质感
-4. 如果参考图中有人物或产品，可以适当融入"""
-            payload["prompt"] = enhanced_prompt
+            if self.support_reference_image:
+                # 支持参考图的 API：传 image + 风格约束 prompt（模型能看到参考图）
+                payload["image"] = data_uri
+                payload["prompt"] = enhanced_prompt
+                logger.debug(f"  image 参数已设置 (support_reference_image=True)")
+            else:
+                # 不支持参考图的 API：直接用原始 prompt，不加无效的风格约束
+                logger.debug(f"  跳过 image 参数 (support_reference_image=False)，使用原始 prompt")
 
         api_url = f"{self.base_url}{self.endpoint_type}"
         logger.debug(f"  发送请求到: {api_url}")

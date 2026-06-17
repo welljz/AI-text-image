@@ -3,7 +3,7 @@ services:
     image: histonemax/redink:latest
     container_name: redink
     ports:
-      - "12398:12398"
+      - "50123:50123"
     volumes:
       # 持久化数据目录
       - ./history:/app/history
