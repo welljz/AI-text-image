@@ -515,12 +515,25 @@ class HistoryService:
                     else:
                         status = RecordStatus.PARTIAL  # 部分完成
 
+                    # 构建按页面索引对齐的 generated 数组（null=未生成/失败）
+                    if expected_count > 0:
+                        image_set = {}
+                        for f in image_files:
+                            try:
+                                idx = int(f.split(".")[0])
+                                image_set[idx] = f
+                            except ValueError:
+                                pass
+                        aligned_generated = [image_set.get(i) for i in range(expected_count)]
+                    else:
+                        aligned_generated = image_files
+
                     # 更新图片列表和状态
                     self.update_record(
                         record_id,
                         images={
                             "task_id": task_id,
-                            "generated": image_files
+                            "generated": aligned_generated
                         },
                         status=status,
                         thumbnail=image_files[0] if image_files else None

@@ -183,6 +183,88 @@ def create_image_blueprint():
 
     # ==================== 重试和重新生成 ====================
 
+    @image_bp.route('/text2img/batch', methods=['POST'])
+    def text2img_batch():
+        """
+        批量快速生图：多个提示词逐张生成
+
+        请求体：
+        - prompts: 提示词列表（必填）
+        - aspect_ratio: 宽高比（默认 1:1）
+        - quality: 图片质量
+
+        返回：
+        - success: 是否成功
+        - task_id: 任务 ID
+        - record_id: 历史记录 ID
+        - images: [{index, filename, image_url, prompt}]
+        - errors: [{index, error}]
+        """
+        try:
+            from backend.services.history import get_history_service
+
+            data = request.get_json()
+            prompts = data.get('prompts', [])
+            aspect_ratio = data.get('aspect_ratio', '1:1')
+            quality = data.get('quality', None)
+
+            if not prompts or len(prompts) == 0:
+                return jsonify({
+                    "success": False,
+                    "error": "参数错误：prompts 不能为空。\n请提供至少一个提示词。"
+                }), 400
+
+            logger.info(f"🎨 批量快速生图: {len(prompts)} 张, ratio={aspect_ratio}, quality={quality or 'default'}")
+
+            image_service = get_image_service()
+            result = image_service.generate_text2img_batch(prompts, aspect_ratio, quality)
+
+            task_id = result["task_id"]
+
+            # 创建历史记录（标题取第一个 prompt）
+            history_service = get_history_service()
+            first_prompt = prompts[0].strip() if prompts else "批量生图"
+            title = first_prompt[:50] + ("..." if len(first_prompt) > 50 else "")
+            record_id = history_service.create_record(
+                topic=title,
+                outline={"raw": "\n".join(prompts), "pages": []},
+                task_id=task_id,
+                record_type="quick",
+                prompt="\n---\n".join(prompts)
+            )
+
+            # 生成 generated 数组（对齐索引）
+            generated = [None] * len(prompts)
+            for img in result["images"]:
+                if img["filename"]:
+                    generated[img["index"]] = img["filename"]
+
+            history_service.update_record(
+                record_id,
+                images={"task_id": task_id, "generated": generated},
+                status="completed",
+                thumbnail=generated[0] if generated[0] else None
+            )
+
+            logger.info(f"✅ 批量快速生图完成: record={record_id}, task={task_id}, {result['generated']}/{result['total']}")
+
+            return jsonify({
+                "success": True,
+                "task_id": task_id,
+                "record_id": record_id,
+                "images": result["images"],
+                "errors": result["errors"],
+                "total": result["total"],
+                "generated": result["generated"]
+            }), 200
+
+        except Exception as e:
+            log_error('/text2img/batch', e)
+            return jsonify({
+                "success": False,
+                "error": f"批量快速生图失败。\n错误详情: {str(e)}"
+            }), 500
+
     @image_bp.route('/retry', methods=['POST'])
     def retry_single_image():
         """

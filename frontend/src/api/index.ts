@@ -44,6 +44,39 @@ export async function generateOutline(
   return response.data
 }
 
+// 批量快速生图结果
+export interface Text2ImgBatchImage {
+  index: number
+  filename: string | null
+  image_url: string | null
+  prompt: string
+}
+
+export interface Text2ImgBatchResponse {
+  success: boolean
+  task_id?: string
+  record_id?: string
+  images?: Text2ImgBatchImage[]
+  errors?: Array<{ index: number; error: string }>
+  total?: number
+  generated?: number
+  error?: string
+}
+
+// 批量快速生图：多个提示词逐张生成
+export async function text2imgBatch(
+  prompts: string[],
+  aspectRatio?: string,
+  quality?: string
+): Promise<Text2ImgBatchResponse> {
+  const response = await axios.post<Text2ImgBatchResponse>(`${API_BASE_URL}/text2img/batch`, {
+    prompts,
+    aspect_ratio: aspectRatio || '1:1',
+    quality: quality || undefined
+  })
+  return response.data
+}
+
 // 获取图片 URL（新格式：task_id/filename）
 // thumbnail 参数：true=缩略图（默认），false=原图
 export function getImageUrl(taskId: string, filename: string, thumbnail: boolean = true): string {

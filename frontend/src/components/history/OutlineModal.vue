@@ -11,9 +11,9 @@
           <div class="outline-page-card-header">
             <span class="page-badge">P{{ idx + 1 }}</span>
             <span class="page-type-badge" :class="page.type">{{ getPageTypeName(page.type) }}</span>
-            <span class="word-count">{{ page.content.length }} 字</span>
+            <span class="word-count">{{ (page.content || '').length }} 字</span>
           </div>
-          <div class="outline-page-card-content" ></div>
+          <div class="outline-page-card-content" v-text="page.content"></div>
           <div v-if="page.visual_prompt" class="outline-page-card-prompt">
             <span class="prompt-label">生图样式</span>
             <div class="prompt-text">{{ page.visual_prompt }}</div>
@@ -27,37 +27,34 @@
 <script setup lang="ts">
 
 interface Page {
-  type: 'cover' | 'content' | 'summary'
+  type: string
   content: string
   visual_prompt?: string
 }
 
-// 定义 Props
 defineProps<{
   visible: boolean
   pages: Page[] | null
 }>()
 
-// 定义 Emits
 defineEmits<{
   (e: 'close'): void
 }>()
 
-/**
- * 获取页面类型的中文名称
- */
 function getPageTypeName(type: string): string {
   const names: Record<string, string> = {
     cover: '封面',
     content: '内容',
-    summary: '总结'
+    summary: '总结',
+    checklist: '清单',
+    comparison: '对比',
+    steps: '步骤'
   }
   return names[type] || '内容'
 }
 </script>
 
 <style scoped>
-/* 模态框遮罩层 */
 .outline-modal-overlay {
   position: fixed;
   inset: 0;
@@ -68,8 +65,6 @@ function getPageTypeName(type: string): string {
   justify-content: center;
   padding: 40px;
 }
-
-/* 模态框内容容器 */
 .outline-modal-content {
   background: var(--bg-card);
   width: 100%;
@@ -81,79 +76,54 @@ function getPageTypeName(type: string): string {
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
-
-/* 模态框头部 */
 .outline-modal-header {
   padding: 20px 24px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
 }
-
 .outline-modal-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-main);
 }
-
-/* 关闭按钮 */
 .close-icon {
   background: none;
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #666;
+  color: var(--text-secondary);
   padding: 0;
   line-height: 1;
   transition: color 0.2s;
 }
-
-.close-icon:hover {
-  color: #333;
-}
-
-/* 模态框主体（可滚动） */
+.close-icon:hover { color: var(--text-main); }
 .outline-modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
-  background: #f9fafb;
+  background: rgba(255,255,255,0.02);
 }
-
-/* 大纲页面卡片 */
 .outline-page-card {
   background: var(--bg-card);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 16px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-color);
   transition: all 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-
-.outline-page-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: #d1d5db;
-}
-
-.outline-page-card:last-child {
-  margin-bottom: 0;
-}
-
-/* 卡片头部 */
+.outline-page-card:last-child { margin-bottom: 0; }
 .outline-page-card-header {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-color);
 }
-
-/* 页码标识 */
 .page-badge {
   display: inline-flex;
   align-items: center;
@@ -161,15 +131,13 @@ function getPageTypeName(type: string): string {
   min-width: 36px;
   height: 24px;
   padding: 0 8px;
-  background: var(--primary, #ff2442);
+  background: var(--primary);
   color: white;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
   font-family: 'Inter', sans-serif;
 }
-
-/* 页面类型标识 */
 .page-type-badge {
   display: inline-flex;
   align-items: center;
@@ -180,66 +148,46 @@ function getPageTypeName(type: string): string {
   background: #e9ecef;
   color: #6c757d;
 }
-
-.page-type-badge.cover {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.page-type-badge.content {
-  background: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.page-type-badge.summary {
-  background: #e8f5e9;
-  color: #388e3c;
-}
-
-/* 字数统计 */
+.page-type-badge.cover { background: #e3f2fd; color: #1976d2; }
+.page-type-badge.content { background: #f3e5f5; color: #7b1fa2; }
+.page-type-badge.summary { background: #e8f5e9; color: #388e3c; }
+.page-type-badge.checklist { background: #fff3e0; color: #e65100; }
+.page-type-badge.comparison { background: #fce4ec; color: #c62828; }
+.page-type-badge.steps { background: #e0f2f1; color: #00695c; }
 .word-count {
   margin-left: auto;
   font-size: 11px;
-  color: #999;
+  color: var(--text-secondary);
 }
-
-/* 卡片内容 */
 .outline-page-card-content {
   font-size: 14px;
   line-height: 1.8;
-  color: #374151;
+  color: var(--text-main);
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
-
-/* 响应式布局 */
+.outline-page-card-prompt {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+.outline-page-card-prompt .prompt-label {
+  font-size: 11px;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+.outline-page-card-prompt .prompt-text {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-top: 4px;
+  line-height: 1.6;
+}
 @media (max-width: 768px) {
-  .outline-modal-overlay {
-    padding: 20px;
-  }
-
-  .outline-modal-content {
-    max-height: 90vh;
-  }
-
-  .outline-modal-header {
-    padding: 16px 20px;
-  }
-
-  .outline-modal-body {
-    padding: 16px 20px;
-  }
+  .outline-modal-overlay { padding: 20px; }
+  .outline-modal-content { max-height: 90vh; }
+  .outline-modal-header { padding: 16px 20px; }
+  .outline-modal-body { padding: 16px 20px; }
 }
-.outline-page-card-prompt { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color); }.outline-page-card-prompt .prompt-label { font-size: 11px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }.outline-page-card-prompt .prompt-text { font-size: 13px; color: var(--text-sub); margin-top: 4px; line-height: 1.6; }.outline-page-card-content :deep(h1) { font-size: 18px; font-weight: 700; margin: 4px 0; }.outline-page-card-content :deep(h2) { font-size: 16px; font-weight: 600; margin: 3px 0; color: var(--primary); }.outline-page-card-content :deep(h3) { font-size: 14px; font-weight: 600; margin: 2px 0; }.outline-page-card-content :deep(strong) { color: var(--primary); font-weight: 600; }.outline-page-card-content :deep(ul) { padding-left: 16px; margin: 4px 0; }.outline-page-card-content :deep(li) { margin: 2px 0; }
-
-.outline-page-card-prompt { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color); }
-.outline-page-card-prompt .prompt-label { font-size: 11px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
-.outline-page-card-prompt .prompt-text { font-size: 13px; color: var(--text-sub); margin-top: 4px; line-height: 1.6; }
-.outline-page-card-content :deep(h1) { font-size: 18px; font-weight: 700; margin: 4px 0; }
-.outline-page-card-content :deep(h2) { font-size: 16px; font-weight: 600; margin: 3px 0; color: var(--primary); }
-.outline-page-card-content :deep(h3) { font-size: 14px; font-weight: 600; margin: 2px 0; }
-.outline-page-card-content :deep(strong) { color: var(--primary); font-weight: 600; }
-.outline-page-card-content :deep(ul) { padding-left: 16px; margin: 4px 0; }
-.outline-page-card-content :deep(li) { margin: 2px 0; }
 </style>

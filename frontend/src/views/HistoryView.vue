@@ -121,8 +121,10 @@
       :visible="!!viewingRecord"
       :record="viewingRecord"
       :regeneratingImages="regeneratingImages"
+      :generatingContent="generatingContent"
       @close="closeGallery"
       @showOutline="showOutlineModal = true"
+      @generateContent="generateContentForRecord"
       @regenerate="regenerateHistoryImage"
       @downloadAll="downloadAllImages"
       @download="downloadImage"
@@ -150,6 +152,7 @@ import {
   getHistory,
   type HistoryRecord,
   regenerateImage as apiRegenerateImage,
+  generateContent as apiGenerateContent,
   updateHistory,
   scanAllTasks
 } from '../api'
@@ -179,6 +182,7 @@ const totalPages = ref(1)
 const viewingRecord = ref<any>(null)
 const regeneratingImages = ref<Set<number>>(new Set())
 const showOutlineModal = ref(false)
+const generatingContent = ref(false)
 const isScanning = ref(false)
 
 /**
@@ -278,7 +282,51 @@ async function loadRecord(id: string) {
  */
 async function viewImages(id: string) {
   const res = await getHistory(id)
-  if (res.success) viewingRecord.value = res.record
+  if (res.success && res.record) {
+    // 按大纲页数补齐 generated 数组：草稿/未生成图片时也能显示占位卡片
+    const pages = res.record.outline?.pages || []
+    const generated = res.record.images?.generated || []
+    if (generated.length < pages.length) {
+      res.record.images.generated = pages.map((_: any, i: number) => generated[i] || null)
+    }
+    viewingRecord.value = res.record
+  }
+}
+
+/**
+ * 在预览弹窗中生成文案
+ */
+async function generateContentForRecord() {
+  if (!viewingRecord.value) return
+  generatingContent.value = true
+
+  try {
+    const result = await apiGenerateContent(
+      viewingRecord.value.title,
+      viewingRecord.value.outline.raw
+    )
+
+    if (result.success) {
+      await updateHistory(viewingRecord.value.id, {
+        content: {
+          titles: result.titles || [],
+          copywriting: result.copywriting || '',
+          tags: result.tags || []
+        }
+      })
+      viewingRecord.value.content = {
+        titles: result.titles || [],
+        copywriting: result.copywriting || '',
+        tags: result.tags || []
+      }
+    } else {
+      alert('文案生成失败: ' + (result.error || '未知错误'))
+    }
+  } catch (e) {
+    alert('文案生成失败: ' + String(e))
+  } finally {
+    generatingContent.value = false
+  }
 }
 
 /**

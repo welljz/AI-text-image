@@ -343,6 +343,94 @@ class ImageService:
             logger.error(f"❌ 快速生图失败: {error_msg[:200]}")
             return {"success": False, "filename": None, "error": error_msg, "task_id": task_id}
 
+    def generate_text2img_batch(
+        self,
+        prompts: list,
+        aspect_ratio: str = "1:1",
+        quality: str = None,
+        user_images: Optional[List[bytes]] = None
+    ) -> Dict[str, Any]:
+        """
+        批量快速生图：多个 prompt 逐张生成，统一存到一个任务目录
+
+        Args:
+            prompts: 提示词列表
+            aspect_ratio: 宽高比
+            quality: 图片质量
+            user_images: 参考图片（所有生成共用）
+
+        Returns:
+            { success, task_id, images: [{index, filename, image_url}], errors: [{index, error}] }
+        """
+        task_id = f"task_{uuid.uuid4().hex[:8]}"
+        task_dir = os.path.join(self.history_root_dir, task_id)
+        os.makedirs(task_dir, exist_ok=True)
+        self.current_task_dir = task_dir
+
+        images = []
+        errors = []
+
+        for idx, prompt in enumerate(prompts):
+            if not prompt.strip():
+                errors.append({"index": idx, "error": "提示词为空"})
+                images.append({"index": idx, "filename": None, "image_url": None, "prompt": prompt})
+                continue
+
+            try:
+                provider_type = self.provider_config.get('type', '')
+
+                if provider_type in ('google_genai', 'image_api', 'replicate'):
+                    image_data = self.generator.generate_image(
+                        prompt=prompt.strip(),
+                        aspect_ratio=aspect_ratio,
+                        temperature=self.provider_config.get('temperature', 1.0),
+                        model=self.provider_config.get('model'),
+                        quality=quality,
+                        reference_images=user_images,
+                    )
+                else:
+                    size_map = {
+                        "1:1": "1024x1024", "3:4": "1024x1365",
+                        "16:9": "1792x1024", "9:16": "1024x1792",
+                    }
+                    size = size_map.get(aspect_ratio, "1024x1024")
+                    image_data = self.generator.generate_image(
+                        prompt=prompt.strip(),
+                        size=size,
+                        model=self.provider_config.get('model'),
+                        quality=quality,
+                    )
+
+                filename = f"{idx}.png"
+                self._save_image(image_data, filename, task_dir)
+                logger.info(f"✅ 批量生图 [{idx+1}/{len(prompts)}]: {task_id}/{filename}")
+                images.append({
+                    "index": idx,
+                    "filename": filename,
+                    "image_url": f"/api/images/{task_id}/{filename}",
+                    "prompt": prompt.strip()
+                })
+
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"❌ 批量生图失败 [{idx+1}/{len(prompts)}]: {error_msg[:200]}")
+                errors.append({"index": idx, "error": error_msg})
+                images.append({
+                    "index": idx,
+                    "filename": None,
+                    "image_url": None,
+                    "prompt": prompt.strip()
+                })
+
+        return {
+            "success": len(images) > 0,
+            "task_id": task_id,
+            "images": images,
+            "errors": errors,
+            "total": len(prompts),
+            "generated": sum(1 for img in images if img["filename"]),
+        }
+
     def generate_images(
         self,
         pages: list,
@@ -749,7 +837,10 @@ class ImageService:
         Yields:
             进度事件
         """
-        # 获取参考图
+        # 设置任务目录
+        self.current_task_dir = os.path.join(self.history_root_dir, task_id)
+        os.makedirs(self.current_task_dir, exist_ok=True)
+
         reference_image = None
         if task_id in self._task_states:
             reference_image = self._task_states[task_id].get("cover_image")

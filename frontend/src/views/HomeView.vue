@@ -50,13 +50,27 @@
         </div>
 
         <div class="quick-input-area">
+          <!-- 多图模式开关 -->
+          <div class="batch-toggle-row">
+            <button
+              class="batch-toggle-btn"
+              :class="{ active: batchMode }"
+              @click="batchMode = !batchMode; quickResult = ''; batchResults = []"
+              :disabled="quickLoading"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              {{ batchMode ? '多图模式' : '单张模式' }}
+            </button>
+            <span v-if="batchMode" class="batch-count">已输入 {{ batchPromptCount }} 行</span>
+          </div>
           <textarea
             v-model="quickPrompt"
             class="quick-textarea"
-            placeholder="描述你想要的图片内容，例如：一只坐在窗台上的橘猫，阳光透过百叶窗洒在它身上，温暖的光影，摄影风格"
+            :placeholder="batchMode ? '一行描述一张图片，例如：\n电商首页，深色主题，产品卡片布局\n商品列表页，筛选栏+网格卡片\n商品详情页，大图+购买按钮\n购物车页面，清单+价格汇总' : '描述你想要的图片内容，例如：一只坐在窗台上的橘猫，阳光透过百叶窗洒在它身上，温暖的光影，摄影风格'"
             rows="4"
             :disabled="quickLoading"
             @keydown.ctrl.enter="handleQuickGenerate"
+            @input="batchMode && (batchPromptCount = quickPrompt.split('\n').filter(l => l.trim()).length)"
           ></textarea>
 
           <!-- 参考图片上传 -->
@@ -116,14 +130,14 @@
               <button class="btn btn-primary quick-btn" @click="handleQuickGenerate" :disabled="quickLoading || !quickPrompt.trim()">
                 <svg v-if="!quickLoading" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                 <div v-else class="spinner-small-white"></div>
-                {{ quickLoading ? '生成中...' : '生成图片' }}
+                {{ quickLoading ? '生成中...' : batchMode && batchPromptCount > 0 ? `生成全部 (${batchPromptCount} 张)` : '生成图片' }}
               </button>
             </div>
           </div>
         </div>
 
-        <!-- 生成结果 -->
-        <div v-if="quickResult" class="quick-result">
+        <!-- 生成结果：单张 -->
+        <div v-if="quickResult && !batchMode" class="quick-result">
           <div class="quick-result-img" @click="quickLightbox = true">
             <img :src="quickResult" alt="生成结果" />
             <div class="quick-img-overlay">
@@ -140,10 +154,36 @@
           </div>
         </div>
 
+        <!-- 生成结果：批量 -->
+        <div v-if="batchResults.length > 0 && batchMode" class="batch-result">
+          <div class="batch-result-header">
+            <span class="quick-done-label">{{ batchResults.filter(r => r.image_url).length }}/{{ batchResults.length }} 张生成完成</span>
+            <button class="btn" @click="resetQuick" style="border: 1px solid var(--border-color);">重新生成</button>
+          </div>
+          <div class="batch-result-grid">
+            <div v-for="(item, idx) in batchResults" :key="idx" class="batch-result-card">
+              <div v-if="item.image_url" class="batch-result-img" @click="batchLightboxSrc = item.image_url">
+                <img :src="item.image_url" :alt="`图片 ${idx + 1}`" loading="lazy" />
+                <div class="quick-img-overlay"><span>查看大图</span></div>
+              </div>
+              <div v-else class="batch-result-failed">
+                <span>生成失败</span>
+              </div>
+              <div class="batch-result-footer">
+                <span class="batch-result-index">#{{ idx + 1 }}</span>
+                <span class="batch-result-prompt" :title="item.prompt">{{ item.prompt?.slice(0, 30) }}{{ item.prompt?.length > 30 ? '...' : '' }}</span>
+                <a v-if="item.image_url" :href="item.image_url + '?thumbnail=false'" download class="batch-download-icon" @click.stop>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 灯箱 -->
-        <div v-if="quickLightbox" class="quick-lightbox" @click="quickLightbox = false">
-          <button class="quick-lightbox-close" @click="quickLightbox = false">×</button>
-          <img :src="quickResult" @click.stop />
+        <div v-if="quickLightbox || batchLightboxSrc" class="quick-lightbox" @click="quickLightbox = false; batchLightboxSrc = null">
+          <button class="quick-lightbox-close" @click="quickLightbox = false; batchLightboxSrc = null">×</button>
+          <img :src="batchLightboxSrc || quickResult" @click.stop />
         </div>
       </template>
     </div>
@@ -165,7 +205,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGeneratorStore } from '../stores/generator'
-import { generateOutline, createHistory, text2img } from '../api'
+import { generateOutline, createHistory, text2img, text2imgBatch } from '../api'
 
 import ComposerInput from '../components/home/ComposerInput.vue'
 
@@ -248,6 +288,12 @@ const qualityOptions = [
   { label: '高清', value: 'high' },
 ]
 
+// --- 批量生图 ---
+const batchMode = ref(false)
+const batchResults = ref<any[]>([])
+const batchPromptCount = ref(0)
+const batchLightboxSrc = ref<string | null>(null)
+
 // --- 快速生图 图片上传 ---
 interface QuickImageItem { file: File; preview: string }
 const quickImageFiles = ref<File[]>([])
@@ -276,14 +322,32 @@ async function handleQuickGenerate() {
   quickLoading.value = true
   errorMsg.value = ''
   quickResult.value = ''
+  batchResults.value = []
 
   try {
-    const imgFiles = quickImageFiles.value.length > 0 ? quickImageFiles.value : undefined
-    const result = await text2img(quickPrompt.value.trim(), quickRatio.value, quickQuality.value, imgFiles)
-    if (result.success && result.image_url) {
-      quickResult.value = result.image_url
+    if (batchMode.value) {
+      // 批量模式：按行拆分提示词
+      const lines = quickPrompt.value.split('\n').filter((l: string) => l.trim())
+      if (lines.length === 0) {
+        errorMsg.value = '请输入至少一行提示词'
+        quickLoading.value = false
+        return
+      }
+      const result = await text2imgBatch(lines, quickRatio.value, quickQuality.value)
+      if (result.success && result.images) {
+        batchResults.value = result.images
+      } else {
+        errorMsg.value = result.error || '批量生成失败'
+      }
     } else {
-      errorMsg.value = result.error || '生成失败'
+      // 单张模式
+      const imgFiles = quickImageFiles.value.length > 0 ? quickImageFiles.value : undefined
+      const result = await text2img(quickPrompt.value.trim(), quickRatio.value, quickQuality.value, imgFiles)
+      if (result.success && result.image_url) {
+        quickResult.value = result.image_url
+      } else {
+        errorMsg.value = result.error || '生成失败'
+      }
     }
   } catch (err: any) {
     errorMsg.value = err.message || '网络错误，请重试'
@@ -302,7 +366,9 @@ function downloadQuickImage() {
 
 function resetQuick() {
   quickResult.value = ''
+  batchResults.value = []
   quickPrompt.value = ''
+  batchPromptCount.value = 0
   quickImagePreviews.value.forEach(img => URL.revokeObjectURL(img.preview))
   quickImagePreviews.value = []
   quickImageFiles.value = []
@@ -705,5 +771,120 @@ function resetQuick() {
   align-items: center;
   justify-content: center;
   padding: 0 4px;
+}
+
+/* 批量模式 */
+.batch-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.batch-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-body);
+  color: var(--text-sub);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.batch-toggle-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.batch-toggle-btn.active {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: #a855f7;
+  color: #a855f7;
+}
+.batch-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 批量结果 */
+.batch-result {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+.batch-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.batch-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.batch-result-card {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  transition: transform 0.15s;
+}
+.batch-result-card:hover {
+  transform: translateY(-2px);
+}
+.batch-result-img {
+  aspect-ratio: 3/4;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  background: var(--bg-body);
+}
+.batch-result-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+.batch-result-img:hover img {
+  transform: scale(1.05);
+}
+.batch-result-failed {
+  aspect-ratio: 3/4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 77, 79, 0.05);
+  color: #ff4d4f;
+  font-size: 12px;
+  border: 1px dashed rgba(255, 77, 79, 0.2);
+}
+.batch-result-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-sub);
+}
+.batch-result-index {
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 24px;
+}
+.batch-result-prompt {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-download-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.batch-download-icon:hover {
+  color: var(--text-main);
 }
 </style>

@@ -13,6 +13,10 @@
         <button class="btn btn-secondary" @click="goBack" style="background: var(--bg-card); border: 1px solid var(--border-color);">
           上一步
         </button>
+        <button class="btn btn-save-outline" :disabled="isSaving" @click="manualSave">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          {{ isSaving ? '保存中...' : '保存' }}
+        </button>
         <button class="btn btn-primary" @click="startGeneration">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
           开始生成图片
@@ -169,6 +173,17 @@ const addPage = (type: 'cover' | 'content' | 'summary') => {
 
 const goBack = () => router.back()
 
+/**
+ * 手动保存按钮：立即保存大纲到历史记录
+ */
+async function manualSave() {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  await autoSaveOutline()
+}
+
 const startGeneration = async () => {
   if (saveTimer !== null) {
     clearTimeout(saveTimer)
@@ -257,6 +272,28 @@ watch(() => store.outline.pages, () => debouncedSave(), { deep: true })
 }
 .save-indicator.saving { color: #1890ff; background: rgba(24, 144, 255, 0.1); }
 .save-indicator.saved { color: #52c41a; background: rgba(82, 196, 26, 0.1); opacity: 0.7; }
+
+.btn-save-outline {
+  display: flex;
+  align-items: center;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--primary);
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-save-outline:hover:not(:disabled) {
+  background: var(--primary);
+  color: #080c14;
+}
+.btn-save-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .outline-grid {
   display: grid;
