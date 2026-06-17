@@ -1,7 +1,10 @@
 #!/bin/bash
 # ============================================================
 #  AI图文创作 — 一键安装脚本
-#  用法: curl -fsSL <raw-url> | sudo bash
+#  用法:
+#    公开仓库: curl -fsSL <raw-url> | sudo bash
+#    私有仓库: curl -fsSL <raw-url> | sudo bash -s -- <repo-url>
+#    本地运行: sudo bash install.sh [repo-url]
 #  适配: Ubuntu 20.04+ / Debian 11+
 # ============================================================
 set -e
@@ -17,7 +20,8 @@ title() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 # ── 配置常量 ──────────────────────────────────────────
 PROJECT_DIR="/var/www/aipic"
-REPO_URL="https://github.com/welljz/AI-text-image.git"
+DEFAULT_REPO="https://github.com/welljz/AI-text-image.git"
+REPO_URL="${1:-$DEFAULT_REPO}"   # 支持命令行参数覆盖
 NGINX_CONF="/etc/nginx/sites-available/redink"
 NGINX_LINK="/etc/nginx/sites-enabled/redink"
 SYSTEMD_SERVICE="/etc/systemd/system/redink.service"
@@ -105,8 +109,12 @@ if [ -d "$PROJECT_DIR/.git" ]; then
     cd "$PROJECT_DIR"
     git pull origin main
     log "代码更新完成"
+elif [ -f "backend/app.py" ] && [ -f "frontend/package.json" ]; then
+    # 本地运行：已经在项目根目录
+    info "检测到当前目录即为项目目录，跳过克隆"
+    PROJECT_DIR="$(pwd)"
 else
-    info "克隆仓库..."
+    info "克隆仓库: $REPO_URL"
     git clone "$REPO_URL" "$PROJECT_DIR"
     cd "$PROJECT_DIR"
     log "代码克隆完成"
