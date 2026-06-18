@@ -64,6 +64,54 @@
           @test="testImageProviderInList"
         />
       </div>
+
+      <!-- 账户安全 -->
+      <div class="card">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">账户安全</h2>
+            <p class="section-desc">修改登录密码</p>
+          </div>
+        </div>
+
+        <form @submit.prevent="handleChangePassword" class="password-form">
+          <div class="form-row">
+            <input
+              v-model="oldPassword"
+              type="password"
+              class="input"
+              placeholder="旧密码"
+              :disabled="changing"
+            />
+          </div>
+          <div class="form-row">
+            <input
+              v-model="newPassword"
+              type="password"
+              class="input"
+              placeholder="新密码（至少 6 位）"
+              :disabled="changing"
+            />
+          </div>
+          <div class="form-row">
+            <input
+              v-model="confirmPassword"
+              type="password"
+              class="input"
+              placeholder="确认新密码"
+              :disabled="changing"
+            />
+          </div>
+
+          <div v-if="pwdError" class="error-msg">{{ pwdError }}</div>
+          <div v-if="pwdSuccess" class="success-msg">{{ pwdSuccess }}</div>
+
+          <button type="submit" class="btn btn-primary" :disabled="changing || !oldPassword || !newPassword || !confirmPassword">
+            <span v-if="changing" class="spinner-sm"></span>
+            <span v-else>修改密码</span>
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- 文本服务商弹窗 -->
@@ -96,7 +144,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import ProviderTable from '../components/settings/ProviderTable.vue'
 import ProviderModal from '../components/settings/ProviderModal.vue'
 import ImageProviderModal from '../components/settings/ImageProviderModal.vue'
@@ -105,6 +154,8 @@ import {
   textTypeOptions,
   imageTypeOptions
 } from '../composables/useProviderForm'
+import { useAuthStore } from '../stores/auth'
+import { useToast } from '../composables/toast'
 
 /**
  * 系统设置页面
@@ -165,6 +216,51 @@ const {
 onMounted(() => {
   loadConfig()
 })
+
+// ── 密码修改 ──────────────────────────────────────────
+const authStore = useAuthStore()
+const router = useRouter()
+const toast = useToast()
+
+const oldPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const changing = ref(false)
+const pwdError = ref('')
+const pwdSuccess = ref('')
+
+async function handleChangePassword() {
+  pwdError.value = ''
+  pwdSuccess.value = ''
+
+  if (newPassword.value.length < 6) {
+    pwdError.value = '新密码至少 6 位'
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    pwdError.value = '两次输入的新密码不一致'
+    return
+  }
+
+  changing.value = true
+  const result = await authStore.changePassword(oldPassword.value, newPassword.value)
+  changing.value = false
+
+  if (result.success) {
+    pwdSuccess.value = result.message || '密码修改成功，请重新登录'
+    toast.success('密码修改成功，即将跳转登录页...')
+    oldPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+    // 清除登录态并跳转
+    setTimeout(() => {
+      authStore.logout()
+      router.replace('/login')
+    }, 1500)
+  } else {
+    pwdError.value = result.error || '修改失败'
+  }
+}
 </script>
 
 <style scoped>
@@ -210,5 +306,31 @@ onMounted(() => {
   justify-content: center;
   padding: 80px 20px;
   color: var(--text-sub);
+}
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+}
+
+.password-form .form-row {
+  width: 100%;
+}
+
+.success-msg {
+  color: #16a34a;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+[data-theme="dark"] .success-msg {
+  color: #4ade80;
+  background: #052e16;
+  border-color: #166534;
 }
 </style>

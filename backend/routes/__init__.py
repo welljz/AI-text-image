@@ -7,11 +7,32 @@ API 路由模块
 - history_routes: 历史记录 CRUD API
 - config_routes: 配置管理 API
 - content_routes: 内容生成相关 API（标题、文案、标签）
+- auth_routes: 登录认证 API
 
 所有路由都注册到统一的 /api 前缀下
 """
 
-from flask import Blueprint
+from flask import Blueprint, request, jsonify
+
+
+# 无需认证的公开路由
+PUBLIC_PATHS = {
+    '/api/auth/login',
+    '/api/auth/status',
+    '/api/health',
+    '/api/config/settings',  # 前端读取公开设置
+}
+
+
+def _is_public_path(path: str) -> bool:
+    """判断路径是否为公开接口（无需认证）"""
+    # 图片资源公开访问
+    if path.startswith('/api/images/'):
+        return True
+    # 精确匹配
+    if path in PUBLIC_PATHS:
+        return True
+    return False
 
 
 def create_api_blueprint():
@@ -28,6 +49,7 @@ def create_api_blueprint():
     from .history_routes import create_history_blueprint
     from .config_routes import create_config_blueprint
     from .content_routes import create_content_blueprint
+    from .auth_routes import create_auth_blueprint
 
     # 创建主 API 蓝图
     api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -38,6 +60,25 @@ def create_api_blueprint():
     api_bp.register_blueprint(create_history_blueprint())
     api_bp.register_blueprint(create_config_blueprint())
     api_bp.register_blueprint(create_content_blueprint())
+    api_bp.register_blueprint(create_auth_blueprint())
+
+    # 全局 Token 校验（公开接口放行）
+    @api_bp.before_request
+    def check_auth():
+        if _is_public_path(request.path):
+            return None
+        # 允许 OPTIONS 预检请求通过（CORS）
+        if request.method == 'OPTIONS':
+            return None
+
+        from backend.auth import check_token
+
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+        if not token or not check_token(token):
+            return jsonify({'success': False, 'error': '未登录或登录已过期'}), 401
+        return None
 
     return api_bp
 

@@ -2,6 +2,58 @@ import axios from 'axios'
 
 const API_BASE_URL = '/api'
 
+// 全局 token 拦截器 — 所有 axios 请求自动带 token
+axios.interceptors.request.use(config => {
+  const token = localStorage.getItem('auth_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+// 401 时清除本地 token
+axios.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_username')
+    }
+    return Promise.reject(err)
+  }
+)
+
+// ── Auth API ──────────────────────────────────────────
+
+export interface AuthResponse {
+  success: boolean
+  token?: string
+  username?: string
+  error?: string
+  message?: string
+  initialized?: boolean
+}
+
+export async function login(password: string): Promise<AuthResponse> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/auth/login`, { password })
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '登录失败' }
+  }
+}
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<AuthResponse> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/auth/change-password`, {
+      old_password: oldPassword,
+      new_password: newPassword
+    })
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '修改密码失败' }
+  }
+}
+
 export interface Page {
   index: number
   type: 'cover' | 'content' | 'summary'

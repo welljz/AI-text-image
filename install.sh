@@ -416,6 +416,21 @@ else
     log "image_providers.yaml 已存在，跳过"
 fi
 
+# auth.yaml（登录密码）
+if [ ! -f "auth.yaml" ]; then
+    AIPIC_PASSWORD=$(openssl rand -base64 9 2>/dev/null || echo "$(date +%s)$RANDOM" | md5sum | cut -c1-12)
+    cat > auth.yaml << AUTHEOF
+username: admin
+password: ${AIPIC_PASSWORD}
+AUTHEOF
+    chmod 600 auth.yaml
+    log "已生成默认登录密码"
+else
+    log "auth.yaml 已存在，跳过"
+    # 读取已有密码用于显示
+    AIPIC_PASSWORD=$(grep '^password:' auth.yaml 2>/dev/null | sed 's/^password: //' || echo "已设置")
+fi
+
 # ── 清理旧版服务名（redink → aipic 迁移） ──────────
 NEED_REDINK_CLEANUP=0
 if [ "$SERVICE_SLUG" = "aipic" ] && systemctl is-active --quiet redink 2>/dev/null; then
@@ -560,6 +575,10 @@ echo -e "  项目目录:  ${CYAN}${PROJECT_DIR}${NC}"
 if [ "$SERVICE_SLUG" != "aipic" ]; then
     echo -e "  实例名称:  ${YELLOW}${SERVICE_SLUG}${NC}"
 fi
+echo -e ""
+echo -e "  ${GREEN}🔐 登录凭据:${NC}"
+echo -e "    用户名:  ${CYAN}admin${NC}"
+echo -e "    密  码:  ${CYAN}${AIPIC_PASSWORD:-请查看 ${PROJECT_DIR}/auth.yaml}${NC}"
 echo -e ""
 if [ ! -f "$PROJECT_DIR/image_providers.yaml" ] || grep -q "xxxxxxxx" "$PROJECT_DIR/image_providers.yaml" 2>/dev/null; then
     echo -e "  ${YELLOW}⚠ 请先配置 API Key:${NC}"
