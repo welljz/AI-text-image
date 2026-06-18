@@ -48,7 +48,7 @@ cat ~/.ssh/id_ed25519.pub
 ### 私有仓库部署
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/welljz/AI-text-image/main/install.sh | sudo bash -s -- git@github.com:you/private-repo.git
+curl -fsSL https://raw.githubusercontent.com/welljz/AI-text-image/main/install.sh | sudo bash -s -- git@github.com:welljz/AI-text-image.git
 ```
 
 ### 线上服务器部署（公开仓库，一键安装）
