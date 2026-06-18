@@ -90,6 +90,15 @@ ensure_pkg() {
     apt install -y -qq "$pkg"
 }
 
+# ── 预飞确认 ──────────────────────────────────────────
+echo ""
+info "安装目标: ${SERVICE_SLUG}"
+info "项目目录: ${PROJECT_DIR}"
+info "对外端口: ${NGINX_PORT}  (Flask: ${FLASK_PORT})"
+echo ""
+info "3 秒后开始安装，Ctrl+C 取消..."
+sleep 3
+
 # ========================================================
 title "1/7  检测环境 + 安装系统依赖"
 # ========================================================
@@ -390,10 +399,12 @@ fi
 # ── Nginx ───────────────────────────────────────────
 # ── 端口冲突检查 ──
 if ss -tlnp 2>/dev/null | grep -q ":${FLASK_PORT} "; then
-    warn "Flask 端口 ${FLASK_PORT} 已被占用，请设置 AIPIC_FLASK 环境变量"
+    err "Flask 端口 ${FLASK_PORT} 已被占用，请设置 AIPIC_FLASK 环境变量后重试"
+    exit 1
 fi
 if ss -tlnp 2>/dev/null | grep -q ":${NGINX_PORT} "; then
-    warn "Nginx 端口 ${NGINX_PORT} 已被占用，请设置 AIPIC_PORT 环境变量"
+    err "Nginx 端口 ${NGINX_PORT} 已被占用，请设置 AIPIC_PORT 环境变量后重试"
+    exit 1
 fi
 
 info "配置 Nginx (${SERVICE_SLUG})..."
@@ -507,7 +518,10 @@ for i in $(seq 1 30); do
     sleep 2
 done
 if [ "$HEALTH_OK" = 0 ]; then
-    warn "健康检查超时，请手动检查: systemctl status ${SERVICE_SLUG}"
+    err "健康检查超时，服务可能未正常启动"
+    err "请手动检查: systemctl status ${SERVICE_SLUG}"
+    err "查看日志: journalctl -u ${SERVICE_SLUG} -n 50"
+    exit 1
 fi
 
 # ========================================================
