@@ -45,7 +45,14 @@ cat ~/.ssh/id_ed25519.pub
 #    头像 → Settings → SSH and GPG keys → New SSH key
 ```
 
-### 线上服务器部署（空机器一键安装）
+### 私有仓库部署
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/welljz/AI-text-image/main/install.sh | \
+  sudo bash -s -- git@github.com:you/private-repo.git
+```
+
+### 线上服务器部署（公开仓库，一键安装）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/welljz/AI-text-image/main/install.sh | sudo bash
@@ -125,13 +132,6 @@ AIPIC_DIR=/var/www/aipic-test sudo bash uninstall.sh -y
 | `NODE_MAJOR` | `22` | Node.js 大版本号 |
 | `UV_INSTALL_URL` | `astral.sh/uv/install.sh` | uv 安装源 |
 | `PYTHON_MIN_VERSION` | `3.11` | Python 最低版本要求 |
-
-### 私有仓库部署
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/welljz/AI-text-image/main/install.sh | \
-  sudo bash -s -- git@github.com:you/private-repo.git
-```
 
 ## 技术栈
 
