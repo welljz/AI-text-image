@@ -184,8 +184,49 @@ for pkg in python3 python3-venv python3-pip; do
     ensure_pkg "$pkg"
 done
 
-# Nginx
-ensure_pkg nginx
+# Nginx — 优先复用已有，没有才装
+if has nginx; then
+    log "检测到已有 Nginx ($(nginx -v 2>&1 | sed 's/nginx version: //'))"
+else
+    ensure_pkg nginx
+fi
+
+# 探测 Nginx 配置目录（适配面板、apt、yum 等不同安装方式）
+_detect_nginx_conf_dir() {
+    # 1) Debian/Ubuntu apt 风格
+    if [ -d "/etc/nginx/sites-available" ]; then
+        echo "/etc/nginx/sites-available|link|/etc/nginx/sites-enabled"
+        return
+    fi
+    # 2) 常见面板/自定义路径的 conf.d
+    for _dir in /www/server/nginx/conf /etc/nginx/conf.d /usr/local/nginx/conf/vhosts; do
+        if [ -d "$_dir" ]; then
+            echo "${_dir}|direct|"
+            return
+        fi
+    done
+    # 3) 从 nginx.conf 解析 include 指令
+    _nginx_conf=$(nginx -t 2>&1 | grep -oP '(?<=configuration file /)[^ ]+' | head -1)
+    _nginx_conf="${_nginx_conf:-/etc/nginx/nginx.conf}"
+    _include_dir=$(grep -oP 'include\s+\K[^;]+' "$_nginx_conf" 2>/dev/null | grep -v 'mime\|fastcgi\|modules' | head -1 | sed 's|/\*\.conf||')
+    if [ -n "$_include_dir" ] && [ -d "$_include_dir" ]; then
+        echo "${_include_dir}|direct|"
+        return
+    fi
+    # 4) 兜底：创建 sites-available 目录
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    echo "/etc/nginx/sites-available|link|/etc/nginx/sites-enabled"
+}
+NGINX_CONF_INFO=$(_detect_nginx_conf_dir)
+NGINX_CONF_DIR="${NGINX_CONF_INFO%%|*}"
+NGINX_MODE="${NGINX_CONF_INFO#*|}"; NGINX_MODE="${NGINX_MODE%%|*}"
+NGINX_LINK_DIR="${NGINX_CONF_INFO##*|}"
+[ "$NGINX_LINK_DIR" = "$NGINX_CONF_DIR" ] && NGINX_LINK_DIR=""
+log "Nginx 配置目录: ${NGINX_CONF_DIR}"
+
+# 重设 Nginx 相关路径
+NGINX_CONF="${NGINX_CONF_DIR}/${SERVICE_SLUG}.conf"
+[ -n "$NGINX_LINK_DIR" ] && NGINX_LINK="${NGINX_LINK_DIR}/${SERVICE_SLUG}.conf" || NGINX_LINK=""
 
 # 检测包管理器类型（apt/yum/dnf）
 if has apt; then
@@ -488,9 +529,11 @@ server {
 }
 NGINXEOF
 
-# 清理同名旧软链接再创建（防止指向错误）
-rm -f "$NGINX_LINK"
-ln -sf "$NGINX_CONF" "$NGINX_LINK"
+# 符号链接模式（sites-available → sites-enabled）
+if [ -n "$NGINX_LINK" ]; then
+    rm -f "$NGINX_LINK"
+    ln -sf "$NGINX_CONF" "$NGINX_LINK"
+fi
 
 # 先测试新配置再重载
 if nginx -t 2>/dev/null; then
@@ -498,8 +541,9 @@ if nginx -t 2>/dev/null; then
     log "Nginx 重载成功 → 端口 $NGINX_PORT"
 else
     err "Nginx 配置测试失败，请手动检查 $NGINX_CONF"
-    # 回滚：删除软链接和问题配置文件
-    rm -f "$NGINX_LINK" "$NGINX_CONF"
+    # 回滚
+    [ -n "$NGINX_LINK" ] && rm -f "$NGINX_LINK"
+    rm -f "$NGINX_CONF"
     exit 1
 fi
 
