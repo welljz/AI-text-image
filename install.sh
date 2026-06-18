@@ -302,10 +302,13 @@ if ! has uv; then
         }
     fi
     export PATH="$HOME/.local/bin:$PATH"
-    # 软链接到标准路径
-    for uv_path in "$HOME/.local/bin/uv" "/usr/local/bin/uv"; do
-        if [ -f "$uv_path" ] && [ ! -f "/usr/local/bin/uv" ]; then
-            ln -sf "$uv_path" /usr/local/bin/uv 2>/dev/null || true
+    # 复制到系统标准路径（systemd 服务以普通用户运行，需全局可访问）
+    mkdir -p /usr/local/bin
+    for uv_src in "$HOME/.local/bin/uv" "/usr/local/bin/uv"; do
+        if [ -f "$uv_src" ]; then
+            cp -f "$uv_src" /usr/local/bin/uv 2>/dev/null || true
+            chmod 755 /usr/local/bin/uv 2>/dev/null || true
+            break
         fi
     done
     log "uv $(uv --version 2>/dev/null || echo 'installed') 安装完成"
@@ -512,7 +515,7 @@ fi
 chown -R "$APP_USER:$APP_USER" "$PROJECT_DIR" 2>/dev/null || true
 
 info "配置 systemd 服务 (${SERVICE_SLUG})..."
-UV_BIN=$(which uv 2>/dev/null || echo "/root/.local/bin/uv")
+UV_BIN=$(which uv 2>/dev/null || echo "/usr/local/bin/uv")
 cat > "$SYSTEMD_SERVICE" << SYSTEMDEOF
 [Unit]
 Description=AI Image Generator (${SERVICE_SLUG})
