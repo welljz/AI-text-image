@@ -127,8 +127,7 @@ if [ "${_UPGRADE_PYTHON:-0}" = 1 ]; then
                 exit 1
             }
         fi
-        update-alternatives --install /usr/bin/python3 python3 /usr/bin/${PY_PKG} 100 2>/dev/null || true
-        log "Python $(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")') 安装完成 (deadsnakes)"
+        log "Python ${PYTHON_MIN_VERSION} 安装完成 (deadsnakes)，未更改系统默认 python3"
     else
         err "Python 版本过低且无法自动升级 (非 apt 系统)"
         err "请手动安装 Python >= ${PYTHON_MIN_VERSION} 后重试"
@@ -149,11 +148,6 @@ done
 for pkg in python3 python3-venv python3-pip; do
     ensure_pkg "$pkg"
 done
-
-# Python3 → python 软链接
-if ! has python; then
-    ln -sf /usr/bin/python3 /usr/bin/python
-fi
 
 # Nginx
 ensure_pkg nginx
