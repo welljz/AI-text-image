@@ -159,16 +159,16 @@ fi
 # pnpm
 if ! has pnpm; then
     info "安装 pnpm..."
-    # 尝试 corepack（Node 16.9+ 内置）
+    # 尝试 corepack（Node 16.9+ 内置，无需 npm）
     if has corepack; then
         corepack enable 2>/dev/null
-        corepack prepare pnpm@latest --activate 2>/dev/null && log "pnpm $(pnpm -v) (corepack)" && SKIP_PNPM_NPM=1
+        if corepack prepare pnpm@latest --activate 2>/dev/null; then
+            SKIP_PNPM_NPM=1
+        fi
     fi
     if [ -z "$SKIP_PNPM_NPM" ]; then
-        # 尝试 npm 安装（配置国内镜像加速）
-        npm config set registry https://registry.npmmirror.com 2>/dev/null || true
         npm install -g pnpm --silent 2>/dev/null || {
-            warn "npm 全局安装 pnpm 失败，尝试 corepack..."
+            warn "npm 安装失败，尝试 corepack..."
             corepack enable 2>/dev/null
             corepack prepare pnpm@latest --activate 2>/dev/null || {
                 err "pnpm 安装失败，请手动安装: npm install -g pnpm"
@@ -176,7 +176,13 @@ if ! has pnpm; then
             }
         }
     fi
-    log "pnpm $(pnpm -v) 安装完成"
+    # 验证 pnpm 可用
+    if has pnpm; then
+        log "pnpm $(pnpm -v) 安装完成"
+    else
+        err "pnpm 未找到，请检查安装"
+        exit 1
+    fi
 else
     log "pnpm $(pnpm -v) 已安装"
 fi
@@ -247,9 +253,8 @@ cd "$PROJECT_DIR"
 # ── 后端 ──
 info "安装 Python 依赖 (uv sync)..."
 if ! uv sync --no-dev 2>/dev/null; then
-    warn "uv sync 默认源失败，尝试清华镜像..."
-    UV_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
-    UV_INDEX="$UV_INDEX" uv sync --no-dev || {
+    warn "默认源不可达，尝试清华镜像..."
+    uv sync --no-dev --index-url https://pypi.tuna.tsinghua.edu.cn/simple || {
         err "Python 依赖安装失败"
         err "请手动执行: cd $PROJECT_DIR && uv sync --no-dev"
         exit 1
@@ -262,12 +267,9 @@ info "安装前端依赖 (pnpm install)..."
 cd "$PROJECT_DIR/frontend"
 export CI=true
 
-# 配置国内镜像（如果源不可达会自动回退）
-pnpm config set registry https://registry.npmmirror.com 2>/dev/null || true
-
 if ! pnpm install --no-frozen-lockfile 2>/dev/null; then
-    warn "默认 registry 失败，尝试官方源..."
-    pnpm config set registry https://registry.npmjs.org 2>/dev/null || true
+    warn "官方源不可达，尝试国内镜像..."
+    pnpm config set registry https://registry.npmmirror.com 2>/dev/null || true
     pnpm install --no-frozen-lockfile || {
         err "前端依赖安装失败"
         err "请手动执行: cd $PROJECT_DIR/frontend && pnpm install"
@@ -277,7 +279,11 @@ fi
 log "前端依赖安装完成"
 
 info "构建前端 (pnpm build)..."
-pnpm build
+if ! pnpm build; then
+    err "前端构建失败"
+    err "请手动执行: cd $PROJECT_DIR/frontend && pnpm build"
+    exit 1
+fi
 log "前端构建完成 → frontend/dist/"
 
 # ========================================================
@@ -310,16 +316,9 @@ else
 fi
 
 # ── 清理旧版服务名（redink → aipic 迁移） ──────────
-if [ "$SERVICE_SLUG" = "aipic" ]; then
-    if systemctl is-active --quiet redink 2>/dev/null; then
-        info "停止旧版 redink 服务..."
-        systemctl stop redink
-        systemctl disable redink 2>/dev/null || true
-        rm -f /etc/systemd/system/redink.service
-        rm -f /etc/nginx/sites-enabled/redink /etc/nginx/sites-available/redink
-        systemctl daemon-reload
-        log "旧版 redink 已清理"
-    fi
+NEED_REDINK_CLEANUP=0
+if [ "$SERVICE_SLUG" = "aipic" ] && systemctl is-active --quiet redink 2>/dev/null; then
+    NEED_REDINK_CLEANUP=1
 fi
 
 # ── Nginx ───────────────────────────────────────────
@@ -348,14 +347,28 @@ NGINXEOF
 # 清理同名旧软链接再创建（防止指向错误）
 rm -f "$NGINX_LINK"
 ln -sf "$NGINX_CONF" "$NGINX_LINK"
-log "Nginx 配置已启用"
 
-# 测试并重载
+# 先测试新配置再重载
 if nginx -t 2>/dev/null; then
     systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || true
     log "Nginx 重载成功 → 端口 $NGINX_PORT"
 else
-    err "Nginx 配置测试失败，请手动检查"
+    err "Nginx 配置测试失败，请手动检查 $NGINX_CONF"
+    # 回滚软链接
+    rm -f "$NGINX_LINK"
+    exit 1
+fi
+
+# ── 新 Nginx 配置生效后，安全清理旧版 ──
+if [ "$NEED_REDINK_CLEANUP" = 1 ]; then
+    info "停止旧版 redink 服务..."
+    systemctl stop redink 2>/dev/null || true
+    systemctl disable redink 2>/dev/null || true
+    rm -f /etc/systemd/system/redink.service
+    rm -f /etc/nginx/sites-enabled/redink /etc/nginx/sites-available/redink
+    systemctl daemon-reload
+    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || true
+    log "旧版 redink 已清理"
 fi
 
 # ── systemd ─────────────────────────────────────────
