@@ -537,7 +537,7 @@ fi
 
 # 先测试新配置再重载
 if nginx -t 2>/dev/null; then
-    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || true
+    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || nginx -s reload 2>/dev/null || true
     log "Nginx 重载成功 → 端口 $NGINX_PORT"
 else
     err "Nginx 配置测试失败，请手动检查 $NGINX_CONF"
