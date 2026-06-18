@@ -28,11 +28,8 @@ FLASK_PORT="${AIPIC_FLASK:-50123}"
 NGINX_PORT="${AIPIC_PORT:-8083}"
 NODE_MAJOR=22
 
-# 服务名从目录名自动推导（/var/www/aipic-test → redink-test）
-SERVICE_SLUG="redink-$(basename "$PROJECT_DIR" | sed 's/^aipic//;s/^-//')"
-SERVICE_SLUG="${SERVICE_SLUG%-}"  # 去掉尾部 -
-# 纯 aipic 时就是 redink
-[ "$SERVICE_SLUG" = "redink-" ] && SERVICE_SLUG="redink"
+# 服务名直接取目录名（/var/www/aipic → aipic, /var/www/aipic-test → aipic-test）
+SERVICE_SLUG="$(basename "$PROJECT_DIR")"
 
 NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
 NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
@@ -179,8 +176,21 @@ else
     log "image_providers.yaml 已存在，跳过"
 fi
 
+# ── 清理旧版服务名（redink → aipic 迁移） ──────────
+if [ "$SERVICE_SLUG" = "aipic" ]; then
+    if systemctl is-active --quiet redink 2>/dev/null; then
+        info "停止旧版 redink 服务..."
+        systemctl stop redink
+        systemctl disable redink 2>/dev/null || true
+        rm -f /etc/systemd/system/redink.service
+        rm -f /etc/nginx/sites-enabled/redink /etc/nginx/sites-available/redink
+        systemctl daemon-reload
+        log "旧版 redink 已清理"
+    fi
+fi
+
 # ── Nginx ───────────────────────────────────────────
-info "配置 Nginx..."
+info "配置 Nginx (${SERVICE_SLUG})..."
 cat > "$NGINX_CONF" << 'NGINXEOF'
 server {
     listen 8083;
@@ -271,7 +281,7 @@ echo -e "${GREEN}╚════════════════════
 echo -e ""
 echo -e "  访问地址:  ${CYAN}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo '服务器IP'):${NGINX_PORT}${NC}"
 echo -e "  项目目录:  ${CYAN}${PROJECT_DIR}${NC}"
-if [ "$SERVICE_SLUG" != "redink" ]; then
+if [ "$SERVICE_SLUG" != "aipic" ]; then
     echo -e "  实例名称:  ${YELLOW}${SERVICE_SLUG}${NC}"
 fi
 echo -e ""
