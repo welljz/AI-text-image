@@ -184,59 +184,59 @@ for pkg in python3 python3-venv python3-pip; do
     ensure_pkg "$pkg"
 done
 
-# Nginx — 优先复用已有，没有才装
+# Nginx — 优先用面板/已有，没有才 apt 装
 NGINX_BIN=""
-if has nginx; then
-    NGINX_BIN="$(which nginx)"
-    log "检测到已有 Nginx ($(nginx -v 2>&1 | sed 's/nginx version: //'))"
-else
-    ensure_pkg nginx
-    NGINX_BIN="$(which nginx 2>/dev/null || echo nginx)"
-fi
+NGINX_MODE=""
+NGINX_CONF_DIR=""
+NGINX_LINK_DIR=""
 
-# 如果系统装了多套 nginx，用正在运行的那个
-_RUNNING_NGINX=$(ps aux 2>/dev/null | grep '[n]ginx.*master process' | grep -oP '(?<=master process )[^ ]+' | head -1)
-if [ -n "$_RUNNING_NGINX" ] && [ -x "$_RUNNING_NGINX" ]; then
-    NGINX_BIN="$_RUNNING_NGINX"
-    log "使用运行中的 Nginx: $NGINX_BIN"
-fi
-
-# 探测 Nginx 配置目录（适配面板、apt、yum 等不同安装方式）
-_detect_nginx_conf_dir() {
-    # 1) Debian/Ubuntu apt 风格
-    if [ -d "/etc/nginx/sites-available" ]; then
-        echo "/etc/nginx/sites-available|link|/etc/nginx/sites-enabled"
-        return
-    fi
-    # 2) 常见面板/自定义路径的 conf.d
-    for _dir in /www/server/nginx/conf /etc/nginx/conf.d /usr/local/nginx/conf/vhosts; do
-        if [ -d "$_dir" ]; then
-            echo "${_dir}|direct|"
-            return
+# 按优先级探测 nginx 二进制和配置目录
+_detect_nginx() {
+    # 常见 nginx 安装位置（面板优先）
+    for _bin in /www/server/nginx/sbin/nginx /usr/local/nginx/sbin/nginx /usr/sbin/nginx /usr/bin/nginx; do
+        if [ -x "$_bin" ]; then
+            NGINX_BIN="$_bin"
+            break
         fi
     done
-    # 3) 从 nginx.conf 解析 include 指令
-    _nginx_conf=$($NGINX_BIN -t 2>&1 | grep -oP '(?<=configuration file /)[^ ]+' | head -1)
-    _nginx_conf="${_nginx_conf:-/etc/nginx/nginx.conf}"
-    _include_dir=$(grep -oP 'include\s+\K[^;]+' "$_nginx_conf" 2>/dev/null | grep -v 'mime\|fastcgi\|modules' | head -1 | sed 's|/\*\.conf||')
-    if [ -n "$_include_dir" ] && [ -d "$_include_dir" ]; then
-        echo "${_include_dir}|direct|"
-        return
-    fi
-    # 4) 兜底：创建 sites-available 目录
-    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-    echo "/etc/nginx/sites-available|link|/etc/nginx/sites-enabled"
-}
-NGINX_CONF_INFO=$(_detect_nginx_conf_dir)
-NGINX_CONF_DIR="${NGINX_CONF_INFO%%|*}"
-NGINX_MODE="${NGINX_CONF_INFO#*|}"; NGINX_MODE="${NGINX_MODE%%|*}"
-NGINX_LINK_DIR="${NGINX_CONF_INFO##*|}"
-[ "$NGINX_LINK_DIR" = "$NGINX_CONF_DIR" ] && NGINX_LINK_DIR=""
-log "Nginx 配置目录: ${NGINX_CONF_DIR}"
+    # PATH 兜底
+    [ -z "$NGINX_BIN" ] && NGINX_BIN="$(which nginx 2>/dev/null || echo '')"
 
-# 重设 Nginx 相关路径
+    if [ -z "$NGINX_BIN" ] || [ ! -x "$NGINX_BIN" ]; then
+        # 没找到，apt 安装
+        ensure_pkg nginx
+        NGINX_BIN="$(which nginx 2>/dev/null || echo /usr/sbin/nginx)"
+    fi
+    log "Nginx 二进制: ${NGINX_BIN}"
+
+    # 从 nginx -t 获取真正使用的配置文件路径
+    _nginx_conf=$($NGINX_BIN -t 2>&1 | grep 'configuration file' | grep -o '/[^ ]*nginx.conf' | head -1)
+    _nginx_conf="${_nginx_conf:-/etc/nginx/nginx.conf}"
+
+    # 探测放置我们配置的目录（按优先级）
+    if [ -d "/etc/nginx/sites-available" ]; then
+        NGINX_CONF_DIR="/etc/nginx/sites-available"
+        NGINX_LINK_DIR="/etc/nginx/sites-enabled"
+        NGINX_MODE="link"
+    elif [ -d "/www/server/nginx/conf" ]; then
+        NGINX_CONF_DIR="/www/server/nginx/conf"
+        NGINX_MODE="direct"
+    elif [ -d "$(dirname "$_nginx_conf")/conf.d" ]; then
+        NGINX_CONF_DIR="$(dirname "$_nginx_conf")/conf.d"
+        NGINX_MODE="direct"
+    else
+        # 兜底
+        mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+        NGINX_CONF_DIR="/etc/nginx/sites-available"
+        NGINX_LINK_DIR="/etc/nginx/sites-enabled"
+        NGINX_MODE="link"
+    fi
+    log "Nginx 配置目录: ${NGINX_CONF_DIR}"
+}
+_detect_nginx
+
 NGINX_CONF="${NGINX_CONF_DIR}/${SERVICE_SLUG}.conf"
-[ -n "$NGINX_LINK_DIR" ] && NGINX_LINK="${NGINX_LINK_DIR}/${SERVICE_SLUG}.conf" || NGINX_LINK=""
+[ "$NGINX_MODE" = "link" ] && NGINX_LINK="${NGINX_LINK_DIR}/${SERVICE_SLUG}.conf" || NGINX_LINK=""
 
 # 检测包管理器类型（apt/yum/dnf）
 if has apt; then
