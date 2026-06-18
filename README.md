@@ -100,6 +100,21 @@ sudo AIPIC_DIR=/var/www/aipic-prod AIPIC_PORT=8083 AIPIC_FLASK=50123 bash instal
 sudo AIPIC_DIR=/var/www/aipic-staging AIPIC_PORT=8084 AIPIC_FLASK=50124 bash install.sh
 ```
 
+### 卸载
+
+```bash
+# 交互式（需确认）
+sudo bash uninstall.sh
+
+# 跳过确认（适合脚本）
+sudo bash uninstall.sh -y
+
+# 卸载指定实例
+AIPIC_DIR=/var/www/aipic-test sudo bash uninstall.sh -y
+```
+
+卸载会移除：systemd 服务、Nginx 配置、项目目录、系统用户。不会删除系统级组件（nginx / nodejs / pnpm / uv）。
+
 ### 可配置环境变量
 
 | 变量 | 默认值 | 说明 |
