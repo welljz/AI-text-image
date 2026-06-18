@@ -1,4 +1,5 @@
 import logging
+import os
 import yaml
 from pathlib import Path
 
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 class Config:
     DEBUG = True
     HOST = '0.0.0.0'
-    PORT = 50123
+    PORT = int(os.environ.get('FLASK_PORT', 50123))
     CORS_ORIGINS = ['http://localhost:5173', 'http://localhost:3000']
     OUTPUT_DIR = 'output'
 

@@ -5,6 +5,8 @@
 #    公开仓库: curl -fsSL <raw-url> | sudo bash
 #    私有仓库: curl -fsSL <raw-url> | sudo bash -s -- <repo-url>
 #    本地运行: sudo bash install.sh [repo-url]
+#  多实例/测试:
+#    AIPIC_DIR=/var/www/aipic-test AIPIC_PORT=8084 AIPIC_FLASK=50124 sudo bash install.sh
 #  适配: Ubuntu 20.04+ / Debian 11+
 # ============================================================
 set -e
@@ -18,16 +20,23 @@ err()   { echo -e "${RED}[✗]${NC} $1"; }
 info()  { echo -e "${BLUE}[i]${NC} $1"; }
 title() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# ── 配置常量 ──────────────────────────────────────────
-PROJECT_DIR="/var/www/aipic"
+# ── 配置常量（支持环境变量覆盖，便于测试多实例部署） ──
+PROJECT_DIR="${AIPIC_DIR:-/var/www/aipic}"
 DEFAULT_REPO="https://github.com/welljz/AI-text-image.git"
-REPO_URL="${1:-$DEFAULT_REPO}"   # 支持命令行参数覆盖
-NGINX_CONF="/etc/nginx/sites-available/redink"
-NGINX_LINK="/etc/nginx/sites-enabled/redink"
-SYSTEMD_SERVICE="/etc/systemd/system/redink.service"
-FLASK_PORT=50123
-NGINX_PORT=8083
+REPO_URL="${1:-$DEFAULT_REPO}"
+FLASK_PORT="${AIPIC_FLASK:-50123}"
+NGINX_PORT="${AIPIC_PORT:-8083}"
 NODE_MAJOR=22
+
+# 服务名从目录名自动推导（/var/www/aipic-test → redink-test）
+SERVICE_SLUG="redink-$(basename "$PROJECT_DIR" | sed 's/^aipic//;s/^-//')"
+SERVICE_SLUG="${SERVICE_SLUG%-}"  # 去掉尾部 -
+# 纯 aipic 时就是 redink
+[ "$SERVICE_SLUG" = "redink-" ] && SERVICE_SLUG="redink"
+
+NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
+NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
+SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_SLUG}.service"
 
 # ── 检查 ──────────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
@@ -208,17 +217,18 @@ else
 fi
 
 # ── systemd ─────────────────────────────────────────
-info "配置 systemd 服务..."
+info "配置 systemd 服务 (${SERVICE_SLUG})..."
 UV_BIN=$(which uv || echo "/root/.local/bin/uv")
 cat > "$SYSTEMD_SERVICE" << SYSTEMDEOF
 [Unit]
-Description=AI Image Generator
+Description=AI Image Generator (${SERVICE_SLUG})
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=$PROJECT_DIR
+Environment=FLASK_PORT=${FLASK_PORT}
 ExecStart=${UV_BIN} run python backend/app.py
 Restart=always
 RestartSec=5
@@ -228,7 +238,7 @@ WantedBy=multi-user.target
 SYSTEMDEOF
 
 systemctl daemon-reload
-systemctl enable redink 2>/dev/null || true
+systemctl enable ${SERVICE_SLUG} 2>/dev/null || true
 log "systemd 服务配置完成"
 
 # ========================================================
@@ -236,11 +246,11 @@ title "7/7  启动服务"
 # ========================================================
 
 # 停止旧进程（如果存在）
-if systemctl is-active --quiet redink 2>/dev/null; then
-    systemctl restart redink
+if systemctl is-active --quiet ${SERVICE_SLUG} 2>/dev/null; then
+    systemctl restart ${SERVICE_SLUG}
     log "服务已重启"
 else
-    systemctl start redink
+    systemctl start ${SERVICE_SLUG}
     log "服务已启动"
 fi
 
@@ -261,6 +271,9 @@ echo -e "${GREEN}╚════════════════════
 echo -e ""
 echo -e "  访问地址:  ${CYAN}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo '服务器IP'):${NGINX_PORT}${NC}"
 echo -e "  项目目录:  ${CYAN}${PROJECT_DIR}${NC}"
+if [ "$SERVICE_SLUG" != "redink" ]; then
+    echo -e "  实例名称:  ${YELLOW}${SERVICE_SLUG}${NC}"
+fi
 echo -e ""
 if [ ! -f "$PROJECT_DIR/image_providers.yaml" ] || grep -q "xxxxxxxx" "$PROJECT_DIR/image_providers.yaml" 2>/dev/null; then
     echo -e "  ${YELLOW}⚠ 请先配置 API Key:${NC}"
@@ -270,7 +283,7 @@ if [ ! -f "$PROJECT_DIR/image_providers.yaml" ] || grep -q "xxxxxxxx" "$PROJECT_
     echo -e ""
 fi
 echo -e "  管理命令:"
-echo -e "    systemctl status redink    查看状态"
-echo -e "    systemctl restart redink   重启服务"
-echo -e "    journalctl -u redink -f    查看日志"
+echo -e "    systemctl status ${SERVICE_SLUG}    查看状态"
+echo -e "    systemctl restart ${SERVICE_SLUG}   重启服务"
+echo -e "    journalctl -u ${SERVICE_SLUG} -f    查看日志"
 echo -e ""
