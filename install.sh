@@ -695,6 +695,7 @@ cat > /usr/local/bin/${SERVICE_SLUG}-update << 'UPDEOF'
 #!/bin/bash
 set -e
 PROJECT_DIR="__PROJECT_DIR__"
+export HOME="$PROJECT_DIR"
 
 log()   { echo "[✓] $1"; }
 err()   { echo "[✗] $1"; }
