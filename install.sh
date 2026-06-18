@@ -316,6 +316,16 @@ else
     log "uv $(uv --version) 已安装"
 fi
 
+# 确保 uv 在系统标准路径可用（systemd 以普通用户运行，不能访问 /root）
+mkdir -p /usr/local/bin
+_UV_REAL=$(readlink -f "$(which uv 2>/dev/null || echo /usr/local/bin/uv)" 2>/dev/null || echo "")
+if [ -n "$_UV_REAL" ] && [ -f "$_UV_REAL" ]; then
+    cp -f "$_UV_REAL" /usr/local/bin/uv 2>/dev/null || true
+    chmod 755 /usr/local/bin/uv 2>/dev/null || true
+elif [ ! -f /usr/local/bin/uv ]; then
+    warn "uv 未在标准路径找到，systemd 服务可能启动失败"
+fi
+
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
 # ========================================================
@@ -515,7 +525,6 @@ fi
 chown -R "$APP_USER:$APP_USER" "$PROJECT_DIR" 2>/dev/null || true
 
 info "配置 systemd 服务 (${SERVICE_SLUG})..."
-UV_BIN=$(which uv 2>/dev/null || echo "/usr/local/bin/uv")
 cat > "$SYSTEMD_SERVICE" << SYSTEMDEOF
 [Unit]
 Description=AI Image Generator (${SERVICE_SLUG})
@@ -526,7 +535,7 @@ Type=simple
 User=${APP_USER}
 WorkingDirectory=$PROJECT_DIR
 Environment=FLASK_PORT=${FLASK_PORT}
-ExecStart=${UV_BIN} run python backend/app.py
+ExecStart=/usr/local/bin/uv run python backend/app.py
 Restart=always
 RestartSec=5
 
