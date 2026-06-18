@@ -669,6 +669,18 @@ if ! id "$APP_USER" &>/dev/null; then
 fi
 chown -R "$APP_USER:$APP_USER" "$PROJECT_DIR" 2>/dev/null || true
 
+# ── Git remote 切 HTTPS（SSH key 是 root 的，aipic 用户用不了） ──
+# 公开仓库用 HTTPS 无需认证，确保 Web 后台一键更新能 git pull
+cd "$PROJECT_DIR"
+_REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo '')
+case "$_REMOTE_URL" in
+    git@github.com:*)
+        _HTTPS_URL="https://github.com/$(echo "$_REMOTE_URL" | sed 's|git@github.com:||')"
+        git remote set-url origin "$_HTTPS_URL" 2>/dev/null || true
+        log "Git remote 已切换 HTTPS（供 ${APP_USER} 用户更新）"
+        ;;
+esac
+
 # ── sudoers: 允许 aipic 用户重启自己的服务 ──
 # 用于 Web 后台一键更新后自动重启
 if [ ! -f "/etc/sudoers.d/${SERVICE_SLUG}" ]; then
