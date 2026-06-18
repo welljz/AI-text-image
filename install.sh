@@ -11,6 +11,10 @@
 # ============================================================
 set -e
 
+# ── 非交互式安装（防止 apt 弹配置提示破坏 stdin） ──────────
+export DEBIAN_FRONTEND=noninteractive
+APT_OPTS="-y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+
 # ── 颜色 ──────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -107,7 +111,7 @@ ensure_pkg() {
         return 0
     fi
     info "安装 $pkg ..."
-    apt install -y -qq "$pkg"
+    apt install $APT_OPTS "$pkg"
 }
 
 # ── 预飞确认 ──────────────────────────────────────────
@@ -150,7 +154,7 @@ if [ "${_UPGRADE_PYTHON:-0}" = 1 ]; then
         fi
         PY_PKG="python${PYTHON_MIN_VERSION}"
         if ! dpkg -s "$PY_PKG" &>/dev/null; then
-            apt install -y -qq "$PY_PKG" "$PY_PKG-venv" "$PY_PKG-dev" || {
+            apt install $APT_OPTS "$PY_PKG" "$PY_PKG-venv" "$PY_PKG-dev" || {
                 err "无法安装 Python ${PYTHON_MIN_VERSION}"
                 err "请手动安装 Python >= ${PYTHON_MIN_VERSION} 后重试"
                 exit 1
@@ -220,11 +224,11 @@ if ! has node; then
     NODE_SETUP_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/nodesource/deb/setup_${NODE_MAJOR}.x"
 
     if safe_curl "$NODE_SETUP_URL" "$NODE_SETUP_MIRROR" | bash - 2>/dev/null; then
-        apt install -y -qq nodejs
+        apt install $APT_OPTS nodejs
         log "Node.js $(node -v) 安装完成"
     else
         warn "NodeSource 不可达，尝试 apt 默认版本..."
-        apt install -y -qq nodejs 2>/dev/null || {
+        apt install $APT_OPTS nodejs 2>/dev/null || {
             err "Node.js 安装失败，请手动安装 Node.js >= 18"
             exit 1
         }
