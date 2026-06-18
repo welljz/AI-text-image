@@ -11,6 +11,22 @@
 # ============================================================
 set -e
 
+# ── 异常退出清理 ──────────────────────────────────────
+_cleanup() {
+    local _exit_code=$?
+    if [ "$_exit_code" -ne 0 ]; then
+        echo -e "\n${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        err "安装中断 (退出码: $_exit_code)"
+        if [ -n "${NGINX_CONF:-}" ] && [ -f "$NGINX_CONF" ]; then
+            warn "Nginx 配置已保留: $NGINX_CONF"
+            warn "请手动检查: ${NGINX_BIN:-nginx} -t"
+        fi
+        info "安装日志: /var/log/${SERVICE_SLUG:-aipic}-install.log"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
+}
+trap _cleanup EXIT
+
 # ── 非交互式安装（防止 apt 弹配置提示破坏 stdin） ──────────
 export DEBIAN_FRONTEND=noninteractive
 APT_OPTS="-y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
@@ -148,7 +164,7 @@ if [ "${_UPGRADE_PYTHON:-0}" = 1 ]; then
     if has apt; then
         ensure_pkg software-properties-common
         if add-apt-repository -y ppa:deadsnakes/ppa; then
-            apt update -qq
+            apt update -qq -o Acquire::http::Timeout=10 -o Acquire::ftp::Timeout=10 2>/dev/null || true
         else
             err "无法添加 deadsnakes PPA（网络不通或系统版本不支持）"
             err "请手动安装 Python >= ${PYTHON_MIN_VERSION} 后重试"
@@ -172,7 +188,7 @@ fi
 
 # 系统包（按需安装，不重复）
 info "检查系统依赖..."
-apt update -qq
+apt update -qq -o Acquire::http::Timeout=10 -o Acquire::ftp::Timeout=10 2>/dev/null || warn "apt update 部分源不可达，继续..."
 
 # 基础工具
 for pkg in curl ca-certificates gnupg unzip git; do
@@ -184,54 +200,86 @@ for pkg in python3 python3-venv python3-pip; do
     ensure_pkg "$pkg"
 done
 
-# Nginx — 优先用面板/已有，没有才 apt 装
+# Nginx — 优先复用已有（面板/apt），没有才装；不影响原有站点
 NGINX_BIN=""
 NGINX_MODE=""
 NGINX_CONF_DIR=""
 NGINX_LINK_DIR=""
 
-# 按优先级探测 nginx 二进制和配置目录
 _detect_nginx() {
-    # 常见 nginx 安装位置（面板优先）
+    # ── 1. 按优先级找 nginx 二进制 ──
     for _bin in /www/server/nginx/sbin/nginx /usr/local/nginx/sbin/nginx /usr/sbin/nginx /usr/bin/nginx; do
         if [ -x "$_bin" ]; then
             NGINX_BIN="$_bin"
             break
         fi
     done
-    # PATH 兜底
     [ -z "$NGINX_BIN" ] && NGINX_BIN="$(which nginx 2>/dev/null || echo '')"
 
     if [ -z "$NGINX_BIN" ] || [ ! -x "$NGINX_BIN" ]; then
-        # 没找到，apt 安装
         ensure_pkg nginx
         NGINX_BIN="$(which nginx 2>/dev/null || echo /usr/sbin/nginx)"
     fi
     log "Nginx 二进制: ${NGINX_BIN}"
 
-    # 从 nginx -t 获取真正使用的配置文件路径
-    _nginx_conf=$($NGINX_BIN -t 2>&1 | grep 'configuration file' | grep -o '/[^ ]*nginx.conf' | head -1)
+    # ── 2. 获取 nginx 实际使用的配置文件路径 + 预存错误检查 ──
+    _NGINX_TEST_OUT=$($NGINX_BIN -t 2>&1) || _NGINX_PRE_FAIL=1
+    _nginx_conf=$(echo "$_NGINX_TEST_OUT" | grep 'configuration file' | grep -o '/[^ ]*nginx.conf' | head -1)
     _nginx_conf="${_nginx_conf:-/etc/nginx/nginx.conf}"
+    if [ "${_NGINX_PRE_FAIL:-0}" = 1 ]; then
+        warn "Nginx 当前配置有预存问题（与本次安装无关）:"
+        echo "$_NGINX_TEST_OUT" | grep '\[emerg\]\|\[error\]' >&2 || true
+        warn "将尝试继续，但可能需要手动修复这些预存问题"
+    fi
+    _NGINX_CONF_DIRNAME=$(dirname "$_nginx_conf")
 
-    # 探测放置我们配置的目录（按优先级）
-    if [ -d "/etc/nginx/sites-available" ]; then
+    # ── 3. 探测放 vhost 配置的正确目录 ──
+    # 判断是否为面板 nginx（避免面板二进制 + apt 目录的错配）
+    case "$NGINX_BIN" in
+        /www/server/*) _IS_PANEL_NGINX=1 ;;
+        *)             _IS_PANEL_NGINX=0 ;;
+    esac
+
+    if [ -d "/etc/nginx/sites-available" ] && [ "$_IS_PANEL_NGINX" = 0 ]; then
+        # 标准 Debian/Ubuntu apt 安装
         NGINX_CONF_DIR="/etc/nginx/sites-available"
         NGINX_LINK_DIR="/etc/nginx/sites-enabled"
         NGINX_MODE="link"
-    elif [ -d "/www/server/nginx/conf" ]; then
-        NGINX_CONF_DIR="/www/server/nginx/conf"
+    elif [ -d "/www/server/panel/vhost/nginx" ]; then
+        # 面板 nginx 的 vhost 目录（aaPanel / 宝塔）
+        NGINX_CONF_DIR="/www/server/panel/vhost/nginx"
         NGINX_MODE="direct"
-    elif [ -d "$(dirname "$_nginx_conf")/conf.d" ]; then
-        NGINX_CONF_DIR="$(dirname "$_nginx_conf")/conf.d"
+    elif [ -d "$_NGINX_CONF_DIRNAME/conf.d" ]; then
+        # RHEL / CentOS 风格
+        NGINX_CONF_DIR="$_NGINX_CONF_DIRNAME/conf.d"
+        NGINX_MODE="direct"
+    elif [ -d "/etc/nginx/conf.d" ]; then
+        NGINX_CONF_DIR="/etc/nginx/conf.d"
         NGINX_MODE="direct"
     else
-        # 兜底
-        mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-        NGINX_CONF_DIR="/etc/nginx/sites-available"
-        NGINX_LINK_DIR="/etc/nginx/sites-enabled"
-        NGINX_MODE="link"
+        # ── 解析 nginx.conf 的 include 指令，找真正的 vhost 目录 ──
+        _found_inc_dir=""
+        if [ -f "$_nginx_conf" ]; then
+            _found_inc_dir=$(grep -oP 'include\s+\K[^;]+' "$_nginx_conf" 2>/dev/null | \
+                grep -vE 'mime|fastcgi|modules|\.(dll|so)|enable-php' | \
+                sed 's|/\*\.conf$||' | sed 's|/\*$||' | \
+                while read -r _d; do [ -d "$_d" ] && echo "$_d" && break; done)
+        fi
+        if [ -n "$_found_inc_dir" ]; then
+            NGINX_CONF_DIR="$_found_inc_dir"
+            NGINX_MODE="direct"
+        elif [ -d "/www/server/nginx/conf" ]; then
+            NGINX_CONF_DIR="/www/server/nginx/conf"
+            NGINX_MODE="direct"
+            warn "面板 Nginx 检测到，但未找到 vhost include 目录；写入 ${NGINX_CONF_DIR}，请手动确认"
+        else
+            mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+            NGINX_CONF_DIR="/etc/nginx/sites-available"
+            NGINX_LINK_DIR="/etc/nginx/sites-enabled"
+            NGINX_MODE="link"
+        fi
     fi
-    log "Nginx 配置目录: ${NGINX_CONF_DIR}"
+    log "Nginx 配置目录: ${NGINX_CONF_DIR}  (模式: ${NGINX_MODE})"
 }
 _detect_nginx
 
@@ -503,21 +551,33 @@ fi
 
 # ── Nginx ───────────────────────────────────────────
 # ── 端口冲突检查 ──
-if ss -tlnp 2>/dev/null | grep -q ":${FLASK_PORT} "; then
+if ss -tlnp 2>/dev/null | grep -qE ":${FLASK_PORT}\s"; then
     err "Flask 端口 ${FLASK_PORT} 已被占用，请设置 AIPIC_FLASK 环境变量后重试"
     exit 1
 fi
-if ss -tlnp 2>/dev/null | grep -q ":${NGINX_PORT} "; then
+if ss -tlnp 2>/dev/null | grep -qE ":${NGINX_PORT}\s"; then
     err "Nginx 端口 ${NGINX_PORT} 已被占用，请设置 AIPIC_PORT 环境变量后重试"
     exit 1
 fi
 
+_NGINX_SKIPPED=0
+
 info "配置 Nginx (${SERVICE_SLUG})..."
+
+# ── Step A: 写入前预检查（排除本次安装无关的预存错误） ──
+info "检查 Nginx 当前配置..."
+if $NGINX_BIN -t >/dev/null 2>&1; then
+    log "Nginx 当前配置正常"
+else
+    warn "当前 Nginx 存在预存配置问题（非本次安装导致），将继续尝试写入"
+fi
+
 # 备份旧配置
 if [ -f "$NGINX_CONF" ]; then
     cp "$NGINX_CONF" "${NGINX_CONF}.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
 fi
 
+# ── Step B: 写入配置 ──
 cat > "$NGINX_CONF" << NGINXEOF
 server {
     listen ${NGINX_PORT};
@@ -545,16 +605,43 @@ if [ -n "$NGINX_LINK" ]; then
     ln -sf "$NGINX_CONF" "$NGINX_LINK"
 fi
 
-# 先测试新配置再重载
-if $NGINX_BIN -t 2>/dev/null; then
-    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || $NGINX_BIN -s reload 2>/dev/null || true
-    log "Nginx 重载成功 → 端口 $NGINX_PORT"
+# ── Step C: 测试配置（显示完整错误输出以便诊断） ──
+_NGINX_TEST_OUT=$($NGINX_BIN -t 2>&1) || _NGINX_TEST_FAIL=1
+if [ "${_NGINX_TEST_FAIL:-0}" = 1 ]; then
+    err "Nginx 配置测试失败"
+    echo ""
+    echo "$_NGINX_TEST_OUT" | grep -E '\[emerg\]|\[error\]|\[warn\]' >&2 || echo "$_NGINX_TEST_OUT" >&2
+    echo ""
+    # 区分：错误是否和本次写入的配置文件有关
+    if echo "$_NGINX_TEST_OUT" | grep -q "$(basename "$NGINX_CONF")"; then
+        err "↑ 错误与 ${SERVICE_SLUG}.conf 有关，回滚并退出"
+        [ -n "$NGINX_LINK" ] && rm -f "$NGINX_LINK"
+        rm -f "$NGINX_CONF"
+        exit 1
+    else
+        warn "↑ 错误未提及 ${SERVICE_SLUG}.conf，可能是预存配置问题"
+        warn "配置文件已保留: $NGINX_CONF"
+        warn "请手动修复后执行: $NGINX_BIN -t && $NGINX_BIN -s reload"
+        _NGINX_SKIPPED=1
+    fi
 else
-    err "Nginx 配置测试失败，请手动检查 $NGINX_CONF"
-    # 回滚
-    [ -n "$NGINX_LINK" ] && rm -f "$NGINX_LINK"
-    rm -f "$NGINX_CONF"
-    exit 1
+    # ── Step D: 重载 Nginx（三种方式逐一尝试，去掉了 || true 兜底） ──
+    _RELOAD_OK=0
+    if systemctl reload nginx 2>/dev/null; then
+        _RELOAD_OK=1
+    elif service nginx reload 2>/dev/null; then
+        _RELOAD_OK=1
+    elif $NGINX_BIN -s reload 2>/dev/null; then
+        _RELOAD_OK=1
+    fi
+
+    if [ "$_RELOAD_OK" = 1 ]; then
+        log "Nginx 重载成功 → 端口 $NGINX_PORT"
+    else
+        err "Nginx 重载失败 — 配置通过测试但 reload 命令均未成功"
+        warn "请手动重载: $NGINX_BIN -s reload"
+        _NGINX_SKIPPED=1
+    fi
 fi
 
 # ── 新 Nginx 配置生效后，安全清理旧版 ──
@@ -563,9 +650,13 @@ if [ "$NEED_REDINK_CLEANUP" = 1 ]; then
     systemctl stop redink 2>/dev/null || true
     systemctl disable redink 2>/dev/null || true
     rm -f /etc/systemd/system/redink.service
-    rm -f /etc/nginx/sites-enabled/redink /etc/nginx/sites-available/redink
+    rm -f /etc/nginx/sites-enabled/redink /etc/nginx/sites-available/redink 2>/dev/null || true
+    rm -f /www/server/panel/vhost/nginx/redink.conf 2>/dev/null || true
+    rm -f /www/server/nginx/conf/redink.conf 2>/dev/null || true
     systemctl daemon-reload
-    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || true
+    if [ "$_NGINX_SKIPPED" = 0 ]; then
+        systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || $NGINX_BIN -s reload 2>/dev/null || true
+    fi
     log "旧版 redink 已清理"
 fi
 
@@ -638,6 +729,12 @@ echo -e "${GREEN}║     🎨 安装完成！                        ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
 echo -e ""
 echo -e "  访问地址:  ${CYAN}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo '服务器IP'):${NGINX_PORT}${NC}"
+if [ "$_NGINX_SKIPPED" = 1 ]; then
+    warn "⚠ Nginx 未重载，上述地址可能无法访问"
+    warn "  请手动修复 Nginx 后执行: $NGINX_BIN -t && $NGINX_BIN -s reload"
+    echo -e "  ${YELLOW}  Flask 直接端口: ${FLASK_PORT} (仅本地)${NC}"
+    echo -e ""
+fi
 echo -e "  项目目录:  ${CYAN}${PROJECT_DIR}${NC}"
 if [ "$SERVICE_SLUG" != "aipic" ]; then
     echo -e "  实例名称:  ${YELLOW}${SERVICE_SLUG}${NC}"
