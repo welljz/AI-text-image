@@ -28,13 +28,17 @@ FLASK_PORT="${AIPIC_FLASK:-50123}"
 NGINX_PORT="${AIPIC_PORT:-8083}"
 NODE_MAJOR="${NODE_MAJOR:-22}"
 UV_INSTALL_URL="${UV_INSTALL_URL:-https://astral.sh/uv/install.sh}"
-PYTHON_MIN_VERSION="${PYTHON_MIN_VERSION:-3.9}"
+PYTHON_MIN_VERSION="${PYTHON_MIN_VERSION:-3.11}"
 
 # 服务名直接取目录名
 SERVICE_SLUG="$(basename "$PROJECT_DIR")"
 NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
 NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
 SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_SLUG}.service"
+
+# ── 安装日志持久化 ──
+mkdir -p /var/log
+exec > >(tee -a /var/log/${SERVICE_SLUG}-install.log) 2>&1
 
 # ── 检查 ──────────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
@@ -47,6 +51,15 @@ echo "  ╔═══════════════════════
 echo "  ║     AI图文创作  一键安装          ║"
 echo "  ╚══════════════════════════════════╝"
 echo -e "${NC}"
+
+# ── 网络可达性检查 ────────────────────────────────────
+info "检查网络连接..."
+if ! curl -fsSL --connect-timeout 5 https://github.com -o /dev/null 2>/dev/null; then
+    if ! curl -fsSL --connect-timeout 5 https://www.google.com -o /dev/null 2>/dev/null; then
+        warn "外网不可达，安装可能失败"
+        warn "请确保服务器能访问互联网，或预先安装好依赖"
+    fi
+fi
 
 # ── 辅助函数 ──────────────────────────────────────────
 
@@ -87,11 +100,40 @@ if has python3; then
     if [ "$(printf '%s\n' "$PYTHON_MIN_VERSION" "$PY_VER" | sort -V | head -1)" = "$PYTHON_MIN_VERSION" ]; then
         log "Python $PY_VER ✓"
     else
-        err "Python 版本过低: $PY_VER (需要 >= $PYTHON_MIN_VERSION)"
-        exit 1
+        warn "Python 版本过低: $PY_VER (需要 >= $PYTHON_MIN_VERSION)"
+        _UPGRADE_PYTHON=1
     fi
 else
     warn "未检测到 Python3，将安装"
+    _UPGRADE_PYTHON=1
+fi
+
+if [ "${_UPGRADE_PYTHON:-0}" = 1 ]; then
+    info "尝试安装 Python ${PYTHON_MIN_VERSION}..."
+    if has apt; then
+        ensure_pkg software-properties-common
+        if add-apt-repository -y ppa:deadsnakes/ppa; then
+            apt update -qq
+        else
+            err "无法添加 deadsnakes PPA（网络不通或系统版本不支持）"
+            err "请手动安装 Python >= ${PYTHON_MIN_VERSION} 后重试"
+            exit 1
+        fi
+        PY_PKG="python${PYTHON_MIN_VERSION}"
+        if ! dpkg -s "$PY_PKG" &>/dev/null; then
+            apt install -y -qq "$PY_PKG" "$PY_PKG-venv" "$PY_PKG-dev" || {
+                err "无法安装 Python ${PYTHON_MIN_VERSION}"
+                err "请手动安装 Python >= ${PYTHON_MIN_VERSION} 后重试"
+                exit 1
+            }
+        fi
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/${PY_PKG} 100 2>/dev/null || true
+        log "Python $(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")') 安装完成 (deadsnakes)"
+    else
+        err "Python 版本过低且无法自动升级 (非 apt 系统)"
+        err "请手动安装 Python >= ${PYTHON_MIN_VERSION} 后重试"
+        exit 1
+    fi
 fi
 
 # 系统包（按需安装，不重复）
@@ -129,6 +171,23 @@ fi
 info "包管理器: $PKG_MGR"
 log "系统依赖检查完成"
 
+# ── 系统资源检查 ──
+MEM_AVAIL_MB=$(awk '/MemAvailable/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo "0")
+# 磁盘检查：若目标目录尚不存在，则检查其父目录
+_DISK_CHECK_PATH="$PROJECT_DIR"
+while [ ! -d "$_DISK_CHECK_PATH" ]; do
+    _DISK_CHECK_PATH="$(dirname "$_DISK_CHECK_PATH")"
+done
+DISK_AVAIL_MB=$(df -m --output=avail "$_DISK_CHECK_PATH" 2>/dev/null | tail -1 || echo "0")
+if [ "$MEM_AVAIL_MB" -gt 0 ] && [ "$MEM_AVAIL_MB" -lt 1800 ]; then
+    warn "可用内存仅 ${MEM_AVAIL_MB}MB，前端构建可能失败 (建议 >= 2GB)"
+fi
+if [ "$DISK_AVAIL_MB" -gt 0 ] && [ "$DISK_AVAIL_MB" -lt 1000 ]; then
+    err "磁盘空间不足: ${DISK_AVAIL_MB}MB (需要 >= 1GB)"
+    exit 1
+fi
+log "内存 ${MEM_AVAIL_MB}MB / 磁盘 ${DISK_AVAIL_MB}MB"
+
 # ========================================================
 title "2/7  安装 Node.js ${NODE_MAJOR} + pnpm"
 # ========================================================
@@ -154,6 +213,16 @@ else
         warn "Node.js 版本过低 ($(node -v))，建议 >= 18"
     fi
     log "Node.js $(node -v) 已安装"
+fi
+
+# 验证 Node.js + npm 功能正常
+if ! node -e 'console.log("ok")' 2>/dev/null | grep -q ok; then
+    err "Node.js 安装后无法正常运行，请手动安装 Node.js >= 18"
+    exit 1
+fi
+if ! has npm; then
+    err "npm 未找到（Node.js 安装可能不完整），请手动安装 Node.js >= 18"
+    exit 1
 fi
 
 # pnpm
@@ -267,14 +336,17 @@ info "安装前端依赖 (pnpm install)..."
 cd "$PROJECT_DIR/frontend"
 export CI=true
 
-if ! pnpm install --no-frozen-lockfile 2>/dev/null; then
-    warn "官方源不可达，尝试国内镜像..."
-    pnpm config set registry https://registry.npmmirror.com 2>/dev/null || true
-    pnpm install --no-frozen-lockfile || {
-        err "前端依赖安装失败"
-        err "请手动执行: cd $PROJECT_DIR/frontend && pnpm install"
-        exit 1
-    }
+if ! pnpm install --frozen-lockfile 2>/dev/null; then
+    info "回退为宽松安装 (--no-frozen-lockfile)..."
+    if ! pnpm install --no-frozen-lockfile 2>/dev/null; then
+        warn "官方源不可达，尝试国内镜像..."
+        pnpm config set registry https://registry.npmmirror.com 2>/dev/null || true
+        pnpm install --no-frozen-lockfile || {
+            err "前端依赖安装失败"
+            err "请手动执行: cd $PROJECT_DIR/frontend && pnpm install"
+            exit 1
+        }
+    fi
 fi
 log "前端依赖安装完成"
 
@@ -322,7 +394,20 @@ if [ "$SERVICE_SLUG" = "aipic" ] && systemctl is-active --quiet redink 2>/dev/nu
 fi
 
 # ── Nginx ───────────────────────────────────────────
+# ── 端口冲突检查 ──
+if ss -tlnp 2>/dev/null | grep -q ":${FLASK_PORT} "; then
+    warn "Flask 端口 ${FLASK_PORT} 已被占用，请设置 AIPIC_FLASK 环境变量"
+fi
+if ss -tlnp 2>/dev/null | grep -q ":${NGINX_PORT} "; then
+    warn "Nginx 端口 ${NGINX_PORT} 已被占用，请设置 AIPIC_PORT 环境变量"
+fi
+
 info "配置 Nginx (${SERVICE_SLUG})..."
+# 备份旧配置
+if [ -f "$NGINX_CONF" ]; then
+    cp "$NGINX_CONF" "${NGINX_CONF}.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+fi
+
 cat > "$NGINX_CONF" << NGINXEOF
 server {
     listen ${NGINX_PORT};
@@ -354,8 +439,8 @@ if nginx -t 2>/dev/null; then
     log "Nginx 重载成功 → 端口 $NGINX_PORT"
 else
     err "Nginx 配置测试失败，请手动检查 $NGINX_CONF"
-    # 回滚软链接
-    rm -f "$NGINX_LINK"
+    # 回滚：删除软链接和问题配置文件
+    rm -f "$NGINX_LINK" "$NGINX_CONF"
     exit 1
 fi
 
@@ -372,6 +457,14 @@ if [ "$NEED_REDINK_CLEANUP" = 1 ]; then
 fi
 
 # ── systemd ─────────────────────────────────────────
+# ── 创建专用运行用户 ──
+APP_USER="${SERVICE_SLUG}"
+if ! id "$APP_USER" &>/dev/null; then
+    useradd -r -s /usr/sbin/nologin -M "$APP_USER" 2>/dev/null || true
+    log "创建系统用户: $APP_USER"
+fi
+chown -R "$APP_USER:$APP_USER" "$PROJECT_DIR" 2>/dev/null || true
+
 info "配置 systemd 服务 (${SERVICE_SLUG})..."
 UV_BIN=$(which uv 2>/dev/null || echo "/root/.local/bin/uv")
 cat > "$SYSTEMD_SERVICE" << SYSTEMDEOF
@@ -381,7 +474,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=${APP_USER}
 WorkingDirectory=$PROJECT_DIR
 Environment=FLASK_PORT=${FLASK_PORT}
 ExecStart=${UV_BIN} run python backend/app.py
@@ -411,13 +504,13 @@ fi
 # 等待启动
 info "等待服务启动..."
 HEALTH_OK=0
-for i in $(seq 1 15); do
-    if curl -s http://127.0.0.1:$FLASK_PORT/api/health > /dev/null 2>&1; then
+for i in $(seq 1 30); do
+    if curl -s http://localhost:$FLASK_PORT/api/health > /dev/null 2>&1; then
         log "服务健康检查通过 ✓"
         HEALTH_OK=1
         break
     fi
-    sleep 1
+    sleep 2
 done
 if [ "$HEALTH_OK" = 0 ]; then
     warn "健康检查超时，请手动检查: systemctl status ${SERVICE_SLUG}"
@@ -439,6 +532,10 @@ if [ ! -f "$PROJECT_DIR/image_providers.yaml" ] || grep -q "xxxxxxxx" "$PROJECT_
     echo -e "    ${CYAN}${PROJECT_DIR}/text_providers.yaml${NC}"
     echo -e "    ${CYAN}${PROJECT_DIR}/image_providers.yaml${NC}"
     echo -e "  或在页面内通过「系统设置」配置"
+    echo -e ""
+fi
+if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    warn "请开放防火墙端口: ufw allow ${NGINX_PORT}/tcp"
     echo -e ""
 fi
 echo -e "  管理命令:"
