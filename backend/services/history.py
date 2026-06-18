@@ -528,16 +528,24 @@ class HistoryService:
                     else:
                         aligned_generated = image_files
 
-                    # 更新图片列表和状态
-                    self.update_record(
-                        record_id,
-                        images={
-                            "task_id": task_id,
-                            "generated": aligned_generated
-                        },
-                        status=status,
-                        thumbnail=image_files[0] if image_files else None
-                    )
+                    # 只有实际变化时才更新（避免无故刷新 updated_at）
+                    existing_generated = record.get("images", {}).get("generated", [])
+                    existing_status = record.get("status")
+                    thumbnail = image_files[0] if image_files else None
+                    existing_thumbnail = record.get("thumbnail")
+
+                    if (aligned_generated != existing_generated or
+                            status != existing_status or
+                            thumbnail != existing_thumbnail):
+                        self.update_record(
+                            record_id,
+                            images={
+                                "task_id": task_id,
+                                "generated": aligned_generated
+                            },
+                            status=status,
+                            thumbnail=thumbnail
+                        )
 
                     return {
                         "success": True,
@@ -629,6 +637,66 @@ class HistoryService:
                 "success": False,
                 "error": f"扫描所有任务失败: {str(e)}"
             }
+
+    def get_orphan_tasks(self) -> Dict[str, Any]:
+        """
+        获取所有孤立任务详情（有图片目录但无关联记录）
+
+        Returns:
+            Dict[str, Any]:
+                - success: 是否成功
+                - orphans: 孤立任务列表 [{task_id, image_count, images, total_size_kb, created_at}]
+                - total: 总数
+        """
+        if not os.path.exists(self.history_dir):
+            return {"success": True, "orphans": [], "total": 0}
+
+        try:
+            # 收集所有记录引用的 task_id
+            index = self._load_index()
+            referenced_task_ids = set()
+            for rec in index.get("records", []):
+                tid = rec.get("task_id")
+                if tid:
+                    referenced_task_ids.add(tid)
+
+            orphans = []
+            for item in os.listdir(self.history_dir):
+                item_path = os.path.join(self.history_dir, item)
+                # 只处理以 task_ 开头的目录
+                if not os.path.isdir(item_path) or not item.startswith("task_"):
+                    continue
+                if item in referenced_task_ids:
+                    continue
+
+                # 收集图片信息
+                images = []
+                total_size = 0
+                for fname in sorted(os.listdir(item_path)):
+                    if fname.startswith("thumb_"):
+                        continue
+                    if fname.endswith((".png", ".jpg", ".jpeg")):
+                        fpath = os.path.join(item_path, fname)
+                        size = os.path.getsize(fpath)
+                        total_size += size
+                        images.append(fname)
+
+                mtime = os.path.getmtime(item_path)
+                orphans.append({
+                    "task_id": item,
+                    "image_count": len(images),
+                    "images": images,
+                    "total_size_kb": round(total_size / 1024, 1),
+                    "created_at": datetime.fromtimestamp(mtime).isoformat()
+                })
+
+            # 按时间倒序
+            orphans.sort(key=lambda x: x["created_at"], reverse=True)
+
+            return {"success": True, "orphans": orphans, "total": len(orphans)}
+
+        except Exception as e:
+            return {"success": False, "error": f"获取孤立任务失败: {str(e)}"}
 
 
 _service_instance = None

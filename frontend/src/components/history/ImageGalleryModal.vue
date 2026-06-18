@@ -20,7 +20,7 @@
       </div>
 
       <!-- 文案区域（小红书图文）：已有文案 -->
-      <div v-if="contentHtml && record.type !== 'quick'" class="modal-content-section">
+      <div v-if="contentHtml && record.type !== 'quick' && record.type !== 'orphan'" class="modal-content-section">
         <div class="content-block" v-if="record.content?.titles?.length">
           <div class="content-label">标题</div>
           <div class="content-titles">{{ record.content.titles.join('  |  ') }}</div>
@@ -38,7 +38,7 @@
       </div>
 
       <!-- 文案区域（小红书图文）：未生成文案 -->
-      <div v-if="!contentHtml && record.type !== 'quick'" class="modal-content-section content-empty">
+      <div v-if="!contentHtml && record.type !== 'quick' && record.type !== 'orphan'" class="modal-content-section content-empty">
         <div class="content-empty-text">尚未生成文案</div>
         <button class="btn generate-content-btn" :disabled="generatingContent" @click="$emit('generateContent')">
           <svg v-if="!generatingContent" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 22l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 2z"/></svg>
@@ -87,7 +87,7 @@
     </div>
 
     <!-- 灯箱 -->
-    <div v-if="lightboxSrc" class="inner-lightbox" @click="lightboxSrc = null">
+    <div v-if="lightboxSrc" class="inner-lightbox" @click.stop="lightboxSrc = null">
       <button class="inner-lightbox-close" @click="lightboxSrc = null">×</button>
       <img :src="lightboxSrc" class="inner-lightbox-img" @click.stop />
     </div>

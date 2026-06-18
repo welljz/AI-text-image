@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { getConfig, updateConfig, testConnection, type Config } from '../api'
+import { useToast } from './toast'
 
 /**
  * 服务商表单管理 Composable
@@ -71,6 +72,7 @@ export const imageTypeOptions = [
  * 服务商表单管理 Hook
  */
 export function useProviderForm() {
+  const toast = useToast()
   // 加载状态
   const loading = ref(true)
   const saving = ref(false)
@@ -146,10 +148,10 @@ export function useProviderForm() {
         }
         imageConfig.value = result.config.image_generation
       } else {
-        alert('加载配置失败: ' + (result.error || '未知错误'))
+        toast.error('加载配置失败: ' + (result.error || '未知错误'))
       }
     } catch (e) {
-      alert('加载配置失败: ' + String(e))
+      toast.error('加载配置失败: ' + String(e))
     } finally {
       loading.value = false
     }
@@ -230,18 +232,18 @@ export function useProviderForm() {
     const name = editingTextProvider.value || textForm.value.name
 
     if (!name) {
-      alert('请填写服务商名称')
+      toast.warning('请填写服务商名称')
       return
     }
 
     if (!textForm.value.type) {
-      alert('请选择服务商类型')
+      toast.warning('请选择服务商类型')
       return
     }
 
     // 新增时必须填写 API Key
     if (!editingTextProvider.value && !textForm.value.api_key) {
-      alert('请填写 API Key')
+      toast.warning('请填写 API Key')
       return
     }
 
@@ -301,10 +303,10 @@ export function useProviderForm() {
         model: textForm.value.model
       })
       if (result.success) {
-        alert('✅ ' + result.message)
+        toast.success('' + result.message)
       }
     } catch (e: any) {
-      alert('❌ 连接失败：' + (e.response?.data?.error || e.message))
+      toast.error('连接失败：' + (e.response?.data?.error || e.message))
     } finally {
       testingText.value = false
     }
@@ -323,10 +325,10 @@ export function useProviderForm() {
         model: provider.model
       })
       if (result.success) {
-        alert('✅ ' + result.message)
+        toast.success('' + result.message)
       }
     } catch (e: any) {
-      alert('❌ 连接失败：' + (e.response?.data?.error || e.message))
+      toast.error('连接失败：' + (e.response?.data?.error || e.message))
     }
   }
 
@@ -384,18 +386,18 @@ export function useProviderForm() {
     const name = editingImageProvider.value || imageForm.value.name
 
     if (!name) {
-      alert('请填写服务商名称')
+      toast.warning('请填写服务商名称')
       return
     }
 
     if (!imageForm.value.type) {
-      alert('请填写服务商类型')
+      toast.warning('请填写服务商类型')
       return
     }
 
     // 新增时必须填写 API Key
     if (!editingImageProvider.value && !imageForm.value.api_key) {
-      alert('请填写 API Key')
+      toast.warning('请填写 API Key')
       return
     }
 
@@ -457,10 +459,10 @@ export function useProviderForm() {
         model: imageForm.value.model
       })
       if (result.success) {
-        alert('✅ ' + result.message)
+        toast.success('' + result.message)
       }
     } catch (e: any) {
-      alert('❌ 连接失败：' + (e.response?.data?.error || e.message))
+      toast.error('连接失败：' + (e.response?.data?.error || e.message))
     } finally {
       testingImage.value = false
     }
@@ -479,10 +481,10 @@ export function useProviderForm() {
         model: provider.model
       })
       if (result.success) {
-        alert('✅ ' + result.message)
+        toast.success('' + result.message)
       }
     } catch (e: any) {
-      alert('❌ 连接失败：' + (e.response?.data?.error || e.message))
+      toast.error('连接失败：' + (e.response?.data?.error || e.message))
     }
   }
 

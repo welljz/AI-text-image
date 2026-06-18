@@ -44,6 +44,36 @@ export async function generateOutline(
   return response.data
 }
 
+// ==================== 孤立任务 API ====================
+
+export interface OrphanTask {
+  task_id: string
+  image_count: number
+  images: string[]
+  total_size_kb: number
+  created_at: string
+}
+
+// 获取孤立任务列表
+export async function getOrphanTasks(): Promise<{
+  success: boolean
+  orphans?: OrphanTask[]
+  total?: number
+  error?: string
+}> {
+  const response = await axios.get(`${API_BASE_URL}/history/orphans`)
+  return response.data
+}
+
+// 删除孤立任务
+export async function deleteOrphanTask(taskId: string): Promise<{
+  success: boolean
+  error?: string
+}> {
+  const response = await axios.delete(`${API_BASE_URL}/history/orphans/${taskId}`)
+  return response.data
+}
+
 // 批量快速生图结果
 export interface Text2ImgBatchImage {
   index: number

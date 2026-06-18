@@ -25,7 +25,7 @@
     </div>
 
     <!-- Stats Overview -->
-    <StatsOverview v-if="stats" :stats="stats" />
+    <StatsOverview v-if="stats" :stats="stats" :orphanCount="orphanTotal" />
 
     <!-- Toolbar: Tabs & Search -->
     <div class="toolbar-wrapper">
@@ -50,6 +50,13 @@
           @click="switchTab('draft')"
         >
           草稿箱
+        </div>
+        <div
+          class="tab-item"
+          :class="{ active: currentTab === 'orphan' }"
+          @click="switchTab('orphan')"
+        >
+          游离图片
         </div>
       </div>
 
@@ -89,7 +96,53 @@
       <div class="spinner"></div>
     </div>
 
-    <div v-else-if="records.length === 0" class="empty-state-large">
+    <!-- 游离图片 -->
+    <div v-if="currentTab === 'orphan' && orphans.length > 0" class="gallery-grid">
+      <div v-for="orphan in orphans" :key="orphan.task_id" class="gallery-card orphan-card">
+        <div class="card-cover" @click="previewOrphanImages(orphan)">
+          <img
+            v-if="orphan.images.length > 0"
+            :src="`/api/images/${orphan.task_id}/${orphan.images[0]}`"
+            alt="preview"
+            loading="lazy"
+            decoding="async"
+          />
+          <div v-else class="cover-placeholder">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          </div>
+          <div class="card-overlay">
+            <button class="overlay-btn" @click.stop="previewOrphanImages(orphan)">查看图片</button>
+          </div>
+          <div class="status-badge" style="background: rgba(250, 173, 20, 0.9);">未关联</div>
+        </div>
+        <div class="card-footer">
+          <div class="card-title" :title="orphan.task_id">{{ orphan.task_id }}</div>
+          <div class="card-meta">
+            <span>{{ orphan.image_count }}张</span>
+            <span class="dot">·</span>
+            <span>{{ orphan.total_size_kb }}KB</span>
+            <div class="more-actions-wrapper">
+              <button class="more-btn" @click.stop="confirmDeleteOrphan(orphan)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="currentTab === 'orphan' && !loadingOrphans && orphans.length === 0" class="empty-state-large">
+      <div class="empty-img">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <h3>没有游离图片</h3>
+      <p class="empty-tips">所有任务目录都已关联到历史记录</p>
+    </div>
+
+    <div v-else-if="currentTab !== 'orphan' && records.length === 0" class="empty-state-large">
       <div class="empty-img">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
       </div>
@@ -97,7 +150,7 @@
       <p class="empty-tips">去创建一个新的作品吧</p>
     </div>
 
-    <div v-else class="gallery-grid">
+    <div v-else-if="currentTab !== 'orphan'" class="gallery-grid">
       <GalleryCard
         v-for="record in records"
         :key="record.id"
@@ -109,7 +162,7 @@
     </div>
 
     <!-- Pagination -->
-    <div v-if="totalPages > 1" class="pagination-wrapper">
+    <div v-if="currentTab !== 'orphan' && totalPages > 1" class="pagination-wrapper">
        <button class="page-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
        <span class="page-indicator">{{ currentPage }} / {{ totalPages }}</span>
        <button class="page-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">Next</button>
@@ -144,6 +197,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useToast } from '../composables/toast'
 import {
   getHistoryList,
   getHistoryStats,
@@ -154,7 +208,10 @@ import {
   regenerateImage as apiRegenerateImage,
   generateContent as apiGenerateContent,
   updateHistory,
-  scanAllTasks
+  scanAllTasks,
+  getOrphanTasks,
+  deleteOrphanTask,
+  type OrphanTask
 } from '../api'
 import { useGeneratorStore } from '../stores/generator'
 
@@ -167,6 +224,7 @@ import OutlineModal from '../components/history/OutlineModal.vue'
 const router = useRouter()
 const route = useRoute()
 const store = useGeneratorStore()
+const toast = useToast()
 
 // 数据状态
 const records = ref<HistoryRecord[]>([])
@@ -184,6 +242,11 @@ const regeneratingImages = ref<Set<number>>(new Set())
 const showOutlineModal = ref(false)
 const generatingContent = ref(false)
 const isScanning = ref(false)
+
+// 孤立任务状态
+const orphans = ref<OrphanTask[]>([])
+const loadingOrphans = ref(false)
+const orphanTotal = ref(0)
 
 /**
  * 加载历史记录列表
@@ -220,7 +283,11 @@ async function loadStats() {
 function switchTab(tab: string) {
   currentTab.value = tab
   currentPage.value = 1
-  loadData()
+  if (tab === 'orphan') {
+    loadOrphans()
+  } else {
+    loadData()
+  }
 }
 
 /**
@@ -320,10 +387,10 @@ async function generateContentForRecord() {
         tags: result.tags || []
       }
     } else {
-      alert('文案生成失败: ' + (result.error || '未知错误'))
+      toast.error('文案生成失败: ' + (result.error || '未知错误'))
     }
   } catch (e) {
-    alert('文案生成失败: ' + String(e))
+    toast.error('文案生成失败: ' + String(e))
   } finally {
     generatingContent.value = false
   }
@@ -350,6 +417,65 @@ async function confirmDelete(record: any) {
 }
 
 /**
+ * 加载孤立任务
+ */
+async function loadOrphans() {
+  loadingOrphans.value = true
+  try {
+    const res = await getOrphanTasks()
+    if (res.success) {
+      orphans.value = res.orphans || []
+      orphanTotal.value = res.total || 0
+    }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingOrphans.value = false
+  }
+}
+
+/**
+ * 预览孤立任务图片
+ */
+function previewOrphanImages(orphan: OrphanTask) {
+  const pages = orphan.images.map((img, i) => ({
+    index: i,
+    type: 'content' as const,
+    content: ''
+  }))
+  viewingRecord.value = {
+    id: orphan.task_id,
+    title: `游离图片 · ${orphan.task_id}`,
+    type: 'orphan',
+    updated_at: orphan.created_at,
+    outline: { raw: '', pages },
+    images: {
+      task_id: orphan.task_id,
+      generated: orphan.images
+    }
+  }
+}
+
+/**
+ * 确认删除孤立任务
+ */
+async function confirmDeleteOrphan(orphan: OrphanTask) {
+  if (!confirm(`确定删除游离目录 ${orphan.task_id}（${orphan.image_count} 张图，${orphan.total_size_kb}KB）？`)) return
+  try {
+    const res = await deleteOrphanTask(orphan.task_id)
+    if (res.success) {
+      orphans.value = orphans.value.filter(o => o.task_id !== orphan.task_id)
+      orphanTotal.value = orphans.value.length
+      toast.success('已删除 ' + orphan.task_id)
+    } else {
+      toast.error('删除失败: ' + (res.error || '未知错误'))
+    }
+  } catch (e: any) {
+    toast.error('删除失败: ' + (e?.message || e))
+  }
+}
+
+/**
  * 切换页码
  */
 function changePage(p: number) {
@@ -361,56 +487,71 @@ function changePage(p: number) {
  * 重新生成历史记录中的图片
  */
 async function regenerateHistoryImage(index: number) {
-  if (!viewingRecord.value || !viewingRecord.value.images.task_id) {
-    alert('无法重新生成：缺少任务信息')
-    return
-  }
-
-  const page = viewingRecord.value.outline.pages[index]
-  if (!page) return
+  const record = viewingRecord.value
+  if (!record) return
 
   regeneratingImages.value.add(index)
 
   try {
+    // 草稿记录没有 task_id，需要先生成新的 task_id
+    if (!record.images.task_id) {
+      const newTaskId = 'task_' + crypto.randomUUID().split('-')[0]
+      // 补齐 generated 数组（全部未生成）
+      const pageCount = record.outline.pages.length
+      record.images = {
+        task_id: newTaskId,
+        generated: new Array(pageCount).fill(null)
+      }
+      // 后端同步
+      await updateHistory(record.id, {
+        images: record.images,
+        status: 'generating'
+      })
+    }
+
+    const page = record.outline.pages[index]
+    if (!page) return
+
     const context = {
-      fullOutline: viewingRecord.value.outline.raw || '',
-      userTopic: viewingRecord.value.title || ''
+      fullOutline: record.outline.raw || '',
+      userTopic: record.title || ''
     }
 
     const result = await apiRegenerateImage(
-      viewingRecord.value.images.task_id,
+      record.images.task_id,
       page,
       true,
       context
     )
 
     if (result.success && result.image_url) {
+      const taskId = record.images.task_id
       const filename = result.image_url.split('/').pop()
-      viewingRecord.value.images.generated[index] = filename
+      record.images.generated[index] = filename
 
       // 刷新图片
       const timestamp = Date.now()
-      const imgElements = document.querySelectorAll(`img[src*="${viewingRecord.value.images.task_id}/${filename}"]`)
+      const imgElements = document.querySelectorAll(`img[src*="${taskId}/${filename}"]`)
       imgElements.forEach(img => {
         const baseUrl = (img as HTMLImageElement).src.split('?')[0]
         ;(img as HTMLImageElement).src = `${baseUrl}?t=${timestamp}`
       })
 
-      await updateHistory(viewingRecord.value.id, {
+      await updateHistory(record.id, {
         images: {
-          task_id: viewingRecord.value.images.task_id,
-          generated: viewingRecord.value.images.generated
+          task_id: taskId,
+          generated: record.images.generated
         }
       })
 
       regeneratingImages.value.delete(index)
     } else {
       regeneratingImages.value.delete(index)
-      alert('重新生成失败: ' + (result.error || '未知错误'))
+      toast.error('重新生成失败: ' + (result.error || '未知错误'))
     }
   } catch (e) {
     regeneratingImages.value.delete(index)
-    alert('重新生成失败: ' + String(e))
+    toast.error('重新生成失败: ' + String(e))
   }
 }
 
@@ -452,15 +593,15 @@ async function handleScanAll() {
         message += `- 孤立任务（无记录）: ${result.orphan_tasks.length} 个\n`
       }
 
-      alert(message)
+      toast.info(message)
       await loadData()
       await loadStats()
     } else {
-      alert('扫描失败: ' + (result.error || '未知错误'))
+      toast.error('扫描失败: ' + (result.error || '未知错误'))
     }
   } catch (e) {
     console.error('扫描失败:', e)
-    alert('扫描失败: ' + String(e))
+    toast.error('扫描失败: ' + String(e))
   } finally {
     isScanning.value = false
   }
@@ -475,9 +616,15 @@ onMounted(async () => {
     await viewImages(route.params.id as string)
   }
 
+  // 预加载游离图片数量（静默）
+  getOrphanTasks().then(res => {
+    if (res.success) orphanTotal.value = res.total || 0
+  }).catch(() => {})
+
   // 自动执行一次扫描（静默，不显示结果）
   try {
     const result = await scanAllTasks()
+    orphanTotal.value = (result.orphan_tasks || []).length
     if (result.success && (result.synced || 0) > 0) {
       await loadData()
       await loadStats()
@@ -621,5 +768,118 @@ onMounted(async () => {
 .empty-state-large .empty-tips {
   margin-top: 10px;
   color: var(--text-placeholder);
+}
+
+/* 游离图片卡片（复用 GalleryCard 视觉风格） */
+.orphan-card {
+  background: var(--bg-card);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.orphan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+.orphan-card .card-cover {
+  aspect-ratio: 3/4;
+  background: #f7f7f7;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 12px 12px 0 0;
+}
+.orphan-card .card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s;
+}
+.orphan-card:hover .card-cover img {
+  transform: scale(1.05);
+}
+.orphan-card .cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e0e0e0;
+  background: #fafafa;
+}
+.orphan-card .card-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  backdrop-filter: blur(2px);
+}
+.orphan-card:hover .card-overlay {
+  opacity: 1;
+}
+.orphan-card .overlay-btn {
+  padding: 8px 24px;
+  border-radius: 100px;
+  border: 1px solid rgba(8, 12, 20, 0.85);
+  background: rgba(0, 229, 255, 0.15);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+.orphan-card .status-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  backdrop-filter: blur(4px);
+}
+.orphan-card .card-footer {
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: 0 0 12px 12px;
+}
+.orphan-card .card-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-sub);
+  font-family: monospace;
+}
+.orphan-card .card-meta {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.orphan-card .dot {
+  margin: 0 6px;
+}
+.orphan-card .more-actions-wrapper {
+  margin-left: auto;
+}
+.orphan-card .more-btn {
+  background: none;
+  border: none;
+  color: var(--text-placeholder);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+}
+.orphan-card .more-btn:hover {
+  background: #fee;
+  color: #ff4d4f;
 }
 </style>

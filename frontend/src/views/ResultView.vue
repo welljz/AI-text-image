@@ -116,10 +116,12 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGeneratorStore } from '../stores/generator'
 import { regenerateImage } from '../api'
+import { useToast } from '../composables/toast'
 import ContentDisplay from '../components/result/ContentDisplay.vue'
 
 const router = useRouter()
 const store = useGeneratorStore()
+const toast = useToast()
 const regeneratingIndex = ref<number | null>(null)
 
 const lightboxUrl = ref<string | null>(null)
@@ -169,7 +171,7 @@ const handleRegenerate = async (image: any) => {
     // Find the page content from outline
     const pageContent = store.outline.pages.find(p => p.index === image.index)
     if (!pageContent) {
-       alert('无法找到对应页面的内容')
+       toast.warning('无法找到对应页面的内容')
        return
     }
 
@@ -184,10 +186,10 @@ const handleRegenerate = async (image: any) => {
        const newUrl = result.image_url
        store.updateImage(image.index, newUrl)
     } else {
-       alert('重绘失败: ' + (result.error || '未知错误'))
+       toast.error('重绘失败: ' + (result.error || '未知错误'))
     }
   } catch (e: any) {
-    alert('重绘失败: ' + e.message)
+    toast.error('重绘失败: ' + (e?.message || String(e)))
   } finally {
     regeneratingIndex.value = null
   }

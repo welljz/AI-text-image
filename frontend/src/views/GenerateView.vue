@@ -261,7 +261,7 @@ onMounted(async () => {
 
   generateImagesPost(
     store.outline.pages,
-    null,
+    store.taskId || null,
     store.outline.raw,  // 传入完整大纲文本
     // onProgress
     (event) => {
@@ -272,6 +272,11 @@ onMounted(async () => {
       console.log('Complete:', event)
       if (event.image_url) {
         store.updateProgress(event.index, 'done', event.image_url)
+        // 从第一个 complete 事件中提取 task_id，确保断连重试时复用同一目录
+        if (!store.taskId) {
+          const match = event.image_url.match(/\/api\/images\/([^/]+)\//)
+          if (match) store.taskId = match[1]
+        }
       }
     },
     // onError
@@ -287,22 +292,28 @@ onMounted(async () => {
       // 更新历史记录
       if (store.recordId) {
         try {
-          // 收集所有生成的图片文件名
-          const generatedImages = event.images.filter(img => img !== null)
+          // 将拍平的图片列表按页索引对齐（缺失页填 null）
+          const totalPages = store.outline.pages.length
+          const alignedGenerated: (string | null)[] = new Array(totalPages).fill(null)
+          event.images.forEach((filename: string) => {
+            const idx = parseInt(filename.split('.')[0])
+            if (!isNaN(idx) && idx < totalPages) alignedGenerated[idx] = filename
+          })
 
           // 确定状态
-          let status = 'completed'
+          const successCount = alignedGenerated.filter(f => f !== null).length
+          let status: string = 'completed'
           if (hasFailedImages.value) {
-            status = generatedImages.length > 0 ? 'partial' : 'draft'
+            status = successCount > 0 ? 'partial' : 'draft'
           }
 
           // 获取封面图作为缩略图（只保存文件名，不是完整URL）
-          const thumbnail = generatedImages.length > 0 ? generatedImages[0] : null
+          const thumbnail = alignedGenerated.find(f => f !== null) || null
 
           await updateHistory(store.recordId, {
             images: {
               task_id: event.task_id,
-              generated: generatedImages
+              generated: alignedGenerated
             },
             status: status,
             thumbnail: thumbnail

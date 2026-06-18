@@ -42,6 +42,20 @@
         <div class="number">{{ stats.by_status?.draft || 0 }}</div>
       </div>
     </div>
+
+    <div class="stat-box">
+      <div class="stat-icon-circle yellow">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </div>
+      <div class="stat-content">
+        <h4>游离图片</h4>
+        <div class="number">{{ orphanCount }}</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -67,6 +81,7 @@ interface Stats {
 
 defineProps<{
   stats: Stats | null
+  orphanCount?: number
 }>()
 </script>
 
@@ -74,7 +89,7 @@ defineProps<{
 /* 统计概览容器 */
 .stats-overview {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin-bottom: 32px;
 }
@@ -122,6 +137,11 @@ defineProps<{
   color: #f97316;
 }
 
+.stat-icon-circle.yellow {
+  background: rgba(250, 173, 20, 0.1);
+  color: #faad14;
+}
+
 /* 统计内容 */
 .stat-content h4 {
   font-size: 13px;
@@ -138,9 +158,9 @@ defineProps<{
 }
 
 /* 响应式布局 */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .stats-overview {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
 

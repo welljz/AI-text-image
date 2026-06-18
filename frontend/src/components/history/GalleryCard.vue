@@ -33,6 +33,7 @@
     <!-- 底部信息 -->
     <div class="card-footer">
       <div class="card-title" :title="record.title">{{ record.title }}</div>
+      <div class="card-id" :title="'点击复制完整 ID: ' + record.id" @click.stop="copyId(record.id)">#{{ record.id.slice(0, 8) }}</div>
       <div class="card-meta">
         <span v-if="record.page_count">{{ record.page_count }}P</span>
         <span v-else>1P</span>
@@ -54,6 +55,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useToast } from '../../composables/toast'
 
 /**
  * 历史记录卡片组件
@@ -101,6 +103,16 @@ const statusText = computed(() => {
 /**
  * 格式化日期
  */
+const toast = useToast()
+
+function copyId(id: string) {
+  navigator.clipboard.writeText(id).then(() => {
+    toast.success('已复制 ID: ' + id)
+  }).catch(() => {
+    toast.error('复制失败')
+  })
+}
+
 const formattedDate = computed(() => {
   const d = new Date(props.record.updated_at)
   const y = d.getFullYear()
@@ -249,11 +261,23 @@ const formattedDate = computed(() => {
 .card-title {
   font-size: 15px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-main, #1a1a1a);
+}
+
+.card-id {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-placeholder, #bbb);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.card-id:hover {
+  color: var(--primary, #00e5ff);
 }
 
 .card-meta {

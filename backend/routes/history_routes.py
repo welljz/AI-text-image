@@ -418,6 +418,73 @@ def create_history_blueprint():
                 "error": f"扫描所有任务失败。\n错误详情: {error_msg}"
             }), 500
 
+    # ==================== 孤立任务 ====================
+
+    @history_bp.route('/history/orphans', methods=['GET'])
+    def get_orphan_tasks():
+        """
+        获取孤立任务列表（有图片目录但无关联记录）
+
+        返回：
+        - success: 是否成功
+        - orphans: 孤立任务列表
+        - total: 总数
+        """
+        try:
+            history_service = get_history_service()
+            result = history_service.get_orphan_tasks()
+
+            if not result.get("success"):
+                return jsonify(result), 500
+
+            return jsonify(result), 200
+
+        except Exception as e:
+            error_msg = str(e)
+            return jsonify({
+                "success": False,
+                "error": f"获取孤立任务失败。\n错误详情: {error_msg}"
+            }), 500
+
+    @history_bp.route('/history/orphans/<task_id>', methods=['DELETE'])
+    def delete_orphan_task(task_id):
+        """
+        删除单个孤立任务目录
+
+        路径参数：
+        - task_id: 任务 ID（目录名）
+
+        返回：
+        - success: 是否成功
+        """
+        try:
+            import shutil
+            history_service = get_history_service()
+            task_dir = os.path.join(history_service.history_dir, task_id)
+
+            if not os.path.exists(task_dir):
+                return jsonify({"success": False, "error": f"任务目录不存在：{task_id}"}), 404
+
+            # 安全检查：确保是 task_ 开头的目录
+            if not task_id.startswith("task_"):
+                return jsonify({"success": False, "error": "无效的任务 ID"}), 400
+
+            # 确保是孤立任务（未被任何记录引用）
+            index = history_service._load_index()
+            for rec in index.get("records", []):
+                if rec.get("task_id") == task_id:
+                    return jsonify({"success": False, "error": "该任务有关联的历史记录，不能作为孤立任务删除"}), 400
+
+            shutil.rmtree(task_dir)
+            return jsonify({"success": True}), 200
+
+        except Exception as e:
+            error_msg = str(e)
+            return jsonify({
+                "success": False,
+                "error": f"删除孤立任务失败。\n错误详情: {error_msg}"
+            }), 500
+
     # ==================== 下载功能 ====================
 
     @history_bp.route('/history/<record_id>/download', methods=['GET'])
