@@ -33,24 +33,86 @@ export interface AuthResponse {
   initialized?: boolean
 }
 
-export async function login(password: string): Promise<AuthResponse> {
+export async function login(username: string, password: string): Promise<AuthResponse> {
   try {
-    const res = await axios.post(`${API_BASE_URL}/auth/login`, { password })
+    const res = await axios.post(`${API_BASE_URL}/auth/login`, { username, password })
     return res.data
   } catch (err: any) {
     return err.response?.data || { success: false, error: '登录失败' }
   }
 }
 
-export async function changePassword(oldPassword: string, newPassword: string): Promise<AuthResponse> {
+// ── System API ─────────────────────────────────────────
+
+export interface CheckUpdateResponse {
+  success: boolean
+  current_commit?: string
+  current_message?: string
+  latest_commit?: string
+  has_update?: boolean
+  new_commits?: string[]
+  error?: string
+}
+
+export async function checkUpdate(): Promise<CheckUpdateResponse> {
   try {
-    const res = await axios.post(`${API_BASE_URL}/auth/change-password`, {
-      old_password: oldPassword,
-      new_password: newPassword
+    const res = await axios.get(`${API_BASE_URL}/system/check-update`)
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '检查更新失败' }
+  }
+}
+
+export async function doUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/system/update`)
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '更新失败' }
+  }
+}
+
+export interface UpdateStatusResponse {
+  success: boolean
+  log?: string
+  done?: boolean
+  error?: boolean
+}
+
+export async function getUpdateStatus(): Promise<UpdateStatusResponse> {
+  try {
+    const res = await axios.get(`${API_BASE_URL}/system/update-status`)
+    return res.data
+  } catch (err: any) {
+    return { success: false, error: true, log: '无法获取更新状态' }
+  }
+}
+
+export async function restartService(): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/system/restart`)
+    return res.data
+  } catch (err: any) {
+    // restart 会导致连接断开，所以 catch 到错误是正常的
+    if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK' || !err.response) {
+      return { success: true, message: '服务正在重启...' }
+    }
+    return err.response?.data || { success: false, error: '重启失败' }
+  }
+}
+
+// ── Account API ──────────────────────────────────────
+
+export async function changeAccount(newUsername?: string, oldPassword?: string, newPassword?: string): Promise<AuthResponse> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/auth/change-account`, {
+      new_username: newUsername || '',
+      old_password: oldPassword || '',
+      new_password: newPassword || ''
     })
     return res.data
   } catch (err: any) {
-    return err.response?.data || { success: false, error: '修改密码失败' }
+    return err.response?.data || { success: false, error: '修改失败' }
   }
 }
 

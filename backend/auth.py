@@ -57,16 +57,21 @@ def save_auth(data: dict):
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
 
 
-def verify_password(password: str) -> bool:
-    """验证密码"""
-    auth = load_auth()
-    stored = auth.get('password', '')
-    if not stored:
+def verify_credentials(username: str, password: str) -> bool:
+    """验证用户名和密码"""
+    if not username or not password:
         return False
-    if _is_hashed(stored):
-        return check_password_hash(stored, password)
+    auth = load_auth()
+    stored_user = auth.get('username', 'admin')
+    stored_pw = auth.get('password', '')
+    if username != stored_user:
+        return False
+    if not stored_pw:
+        return False
+    if _is_hashed(stored_pw):
+        return check_password_hash(stored_pw, password)
     # 兼容未哈希的明文密码
-    return stored == password
+    return stored_pw == password
 
 
 def generate_token() -> str:

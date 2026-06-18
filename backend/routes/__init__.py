@@ -50,6 +50,7 @@ def create_api_blueprint():
     from .config_routes import create_config_blueprint
     from .content_routes import create_content_blueprint
     from .auth_routes import create_auth_blueprint
+    from .system_routes import create_system_blueprint
 
     # 创建主 API 蓝图
     api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -61,6 +62,7 @@ def create_api_blueprint():
     api_bp.register_blueprint(create_config_blueprint())
     api_bp.register_blueprint(create_content_blueprint())
     api_bp.register_blueprint(create_auth_blueprint())
+    api_bp.register_blueprint(create_system_blueprint())
 
     # 全局 Token 校验（公开接口放行）
     @api_bp.before_request

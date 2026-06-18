@@ -669,6 +669,60 @@ if ! id "$APP_USER" &>/dev/null; then
 fi
 chown -R "$APP_USER:$APP_USER" "$PROJECT_DIR" 2>/dev/null || true
 
+# ── sudoers: 允许 aipic 用户重启自己的服务 ──
+# 用于 Web 后台一键更新后自动重启
+if [ ! -f "/etc/sudoers.d/${SERVICE_SLUG}" ]; then
+    echo "${APP_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_SLUG}, /usr/bin/systemctl status ${SERVICE_SLUG}" > "/etc/sudoers.d/${SERVICE_SLUG}"
+    chmod 440 "/etc/sudoers.d/${SERVICE_SLUG}"
+    log "sudoers 规则已添加: ${SERVICE_SLUG}"
+fi
+
+# ── 一键更新脚本 ──
+cat > /usr/local/bin/${SERVICE_SLUG}-update << 'UPDEOF'
+#!/bin/bash
+set -e
+PROJECT_DIR="__PROJECT_DIR__"
+
+log()   { echo "[✓] $1"; }
+err()   { echo "[✗] $1"; }
+
+cd "$PROJECT_DIR"
+
+echo "[1/4] 拉取最新代码..."
+if ! git pull origin main 2>&1; then
+    err "git pull 失败（网络不可达或认证错误）"
+    exit 1
+fi
+log "代码已更新"
+
+echo "[2/4] 更新 Python 依赖..."
+if ! /usr/local/bin/uv sync --no-dev 2>&1; then
+    err "Python 依赖更新失败"
+    exit 1
+fi
+log "Python 依赖已更新"
+
+echo "[3/4] 更新前端依赖..."
+cd frontend
+if ! pnpm install --frozen-lockfile 2>&1 && ! pnpm install --no-frozen-lockfile 2>&1; then
+    err "前端依赖更新失败"
+    exit 1
+fi
+log "前端依赖已更新"
+
+echo "[4/4] 构建前端..."
+if ! pnpm build 2>&1; then
+    err "前端构建失败"
+    exit 1
+fi
+log "前端构建完成"
+echo ""
+log "更新完成，请重启服务使新代码生效"
+UPDEOF
+sed -i "s|__PROJECT_DIR__|${PROJECT_DIR}|g" /usr/local/bin/${SERVICE_SLUG}-update
+chmod +x /usr/local/bin/${SERVICE_SLUG}-update
+log "更新脚本已创建: /usr/local/bin/${SERVICE_SLUG}-update"
+
 info "配置 systemd 服务 (${SERVICE_SLUG})..."
 cat > "$SYSTEMD_SERVICE" << SYSTEMDEOF
 [Unit]

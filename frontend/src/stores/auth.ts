@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { login as apiLogin, changePassword as apiChangePassword } from '../api'
+import { login as apiLogin, changeAccount as apiChangeAccount } from '../api'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('auth_token') || '')
@@ -22,10 +22,10 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('auth_username')
   }
 
-  async function login(password: string): Promise<{ success: boolean; error?: string }> {
-    const res = await apiLogin(password)
+  async function login(username: string, password: string): Promise<{ success: boolean; error?: string }> {
+    const res = await apiLogin(username, password)
     if (res.success && res.token) {
-      setAuth(res.token, res.username || 'admin')
+      setAuth(res.token, res.username || username)
     }
     return res
   }
@@ -34,8 +34,8 @@ export const useAuthStore = defineStore('auth', () => {
     clearAuth()
   }
 
-  async function changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-    return await apiChangePassword(oldPassword, newPassword)
+  async function changeAccount(newUsername?: string, oldPassword?: string, newPassword?: string): Promise<{ success: boolean; error?: string }> {
+    return await apiChangeAccount(newUsername, oldPassword, newPassword)
   }
 
   return {
@@ -44,6 +44,6 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     logout,
-    changePassword
+    changeAccount
   }
 })

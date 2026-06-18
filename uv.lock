@@ -765,7 +765,7 @@ wheels = [
 
 [[package]]
 name = "xiaohongshu-generator"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "flask" },
@@ -787,6 +787,3 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
 ]
-
-[package.metadata.requires-dev]
-dev = []

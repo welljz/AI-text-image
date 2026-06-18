@@ -3,24 +3,33 @@
     <div class="login-card card">
       <div class="login-header">
         <h1 class="logo-text-glow">AI图文创作</h1>
-        <p class="login-subtitle">请输入密码以继续</p>
+        <p class="login-subtitle">请输入账户信息以继续</p>
       </div>
 
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
           <input
+            v-model="username"
+            type="text"
+            class="input"
+            placeholder="用户名"
+            :disabled="loading"
+            autofocus
+          />
+        </div>
+        <div class="form-group">
+          <input
             v-model="password"
             type="password"
             class="input"
-            placeholder="输入密码"
+            placeholder="密码"
             :disabled="loading"
-            autofocus
           />
         </div>
 
         <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
 
-        <button type="submit" class="btn btn-primary login-btn" :disabled="loading || !password">
+        <button type="submit" class="btn btn-primary login-btn" :disabled="loading || !username || !password">
           <span v-if="loading" class="spinner-sm"></span>
           <span v-else>登 录</span>
         </button>
@@ -37,16 +46,17 @@ import { useAuthStore } from '../stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
+const username = ref('admin')
 const password = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 
 async function handleLogin() {
-  if (!password.value) return
+  if (!username.value || !password.value) return
   loading.value = true
   errorMsg.value = ''
 
-  const result = await authStore.login(password.value)
+  const result = await authStore.login(username.value, password.value)
 
   if (result.success) {
     const redirect = (router.currentRoute.value.query.redirect as string) || '/'
