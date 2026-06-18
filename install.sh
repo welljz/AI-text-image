@@ -195,7 +195,7 @@ else
 fi
 
 # 如果系统装了多套 nginx，用正在运行的那个
-_RUNNING_NGINX=$(ps aux 2>/dev/null | grep -oP '(?<=master process )[^ ]+' | head -1)
+_RUNNING_NGINX=$(ps aux 2>/dev/null | grep '[n]ginx.*master process' | grep -oP '(?<=master process )[^ ]+' | head -1)
 if [ -n "$_RUNNING_NGINX" ] && [ -x "$_RUNNING_NGINX" ]; then
     NGINX_BIN="$_RUNNING_NGINX"
     log "使用运行中的 Nginx: $NGINX_BIN"
