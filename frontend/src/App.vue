@@ -26,7 +26,7 @@
 
         <footer v-if="route.path !== '/'" class="global-footer">
           <div class="footer-content">
-            <div class="footer-text">© 2025-2026 AI图文创作</div>
+            <div class="footer-text">© 2025-2026 AI图文创作 · v1</div>
           </div>
         </footer>
       </RouterView>
