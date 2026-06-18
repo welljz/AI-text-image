@@ -185,10 +185,20 @@ for pkg in python3 python3-venv python3-pip; do
 done
 
 # Nginx — 优先复用已有，没有才装
+NGINX_BIN=""
 if has nginx; then
+    NGINX_BIN="$(which nginx)"
     log "检测到已有 Nginx ($(nginx -v 2>&1 | sed 's/nginx version: //'))"
 else
     ensure_pkg nginx
+    NGINX_BIN="$(which nginx 2>/dev/null || echo nginx)"
+fi
+
+# 如果系统装了多套 nginx，用正在运行的那个
+_RUNNING_NGINX=$(ps aux 2>/dev/null | grep -oP '(?<=master process )[^ ]+' | head -1)
+if [ -n "$_RUNNING_NGINX" ] && [ -x "$_RUNNING_NGINX" ]; then
+    NGINX_BIN="$_RUNNING_NGINX"
+    log "使用运行中的 Nginx: $NGINX_BIN"
 fi
 
 # 探测 Nginx 配置目录（适配面板、apt、yum 等不同安装方式）
@@ -206,7 +216,7 @@ _detect_nginx_conf_dir() {
         fi
     done
     # 3) 从 nginx.conf 解析 include 指令
-    _nginx_conf=$(nginx -t 2>&1 | grep -oP '(?<=configuration file /)[^ ]+' | head -1)
+    _nginx_conf=$($NGINX_BIN -t 2>&1 | grep -oP '(?<=configuration file /)[^ ]+' | head -1)
     _nginx_conf="${_nginx_conf:-/etc/nginx/nginx.conf}"
     _include_dir=$(grep -oP 'include\s+\K[^;]+' "$_nginx_conf" 2>/dev/null | grep -v 'mime\|fastcgi\|modules' | head -1 | sed 's|/\*\.conf||')
     if [ -n "$_include_dir" ] && [ -d "$_include_dir" ]; then
@@ -536,8 +546,8 @@ if [ -n "$NGINX_LINK" ]; then
 fi
 
 # 先测试新配置再重载
-if nginx -t 2>/dev/null; then
-    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || nginx -s reload 2>/dev/null || true
+if $NGINX_BIN -t 2>/dev/null; then
+    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || $NGINX_BIN -s reload 2>/dev/null || true
     log "Nginx 重载成功 → 端口 $NGINX_PORT"
 else
     err "Nginx 配置测试失败，请手动检查 $NGINX_CONF"
