@@ -33,6 +33,7 @@ NGINX_PORT="${AIPIC_PORT:-8083}"
 NODE_MAJOR="${NODE_MAJOR:-22}"
 UV_INSTALL_URL="${UV_INSTALL_URL:-https://astral.sh/uv/install.sh}"
 PYTHON_MIN_VERSION="${PYTHON_MIN_VERSION:-3.11}"
+DOMAIN="${AIPIC_DOMAIN:-_}"
 
 # 服务名直接取目录名
 SERVICE_SLUG="$(basename "$PROJECT_DIR")"
@@ -119,6 +120,7 @@ echo ""
 info "安装目标: ${SERVICE_SLUG}"
 info "项目目录: ${PROJECT_DIR}"
 info "对外端口: ${NGINX_PORT}  (Flask: ${FLASK_PORT})"
+[ "$DOMAIN" != "_" ] && info "域名:     ${DOMAIN}"
 echo ""
 info "3 秒后开始安装，Ctrl+C 取消..."
 sleep 3
@@ -440,7 +442,7 @@ fi
 cat > "$NGINX_CONF" << NGINXEOF
 server {
     listen ${NGINX_PORT};
-    server_name _;
+    server_name ${DOMAIN};
 
     proxy_read_timeout 360s;
     proxy_send_timeout 360s;

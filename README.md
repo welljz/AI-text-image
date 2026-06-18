@@ -131,6 +131,7 @@ AIPIC_DIR=/var/www/aipic-test sudo bash uninstall.sh -y
 | `NODE_MAJOR` | `22` | Node.js 大版本号 |
 | `UV_INSTALL_URL` | `astral.sh/uv/install.sh` | uv 安装源 |
 | `PYTHON_MIN_VERSION` | `3.11` | Python 最低版本要求 |
+| `AIPIC_DOMAIN` | `_`（匹配所有） | 域名，设后 Nginx 仅响应该域名 |
 
 ## 技术栈
 
