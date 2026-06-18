@@ -111,19 +111,30 @@ export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 title "4/7  拉取项目代码"
 # ========================================================
 if [ -d "$PROJECT_DIR/.git" ]; then
-    info "项目目录已存在，执行 git pull..."
+    info "项目目录已存在，尝试 git pull 更新..."
     cd "$PROJECT_DIR"
-    git pull origin main
-    log "代码更新完成"
-elif [ -f "backend/app.py" ] && [ -f "frontend/package.json" ]; then
-    # 本地运行：已经在项目根目录
-    info "检测到当前目录即为项目目录，跳过克隆"
-    PROJECT_DIR="$(pwd)"
+    git pull origin main 2>/dev/null || warn "git pull 失败（网络不可达），使用现有代码继续"
+elif [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/backend/app.py" ]; then
+    # 目录已存在且有代码（手动解压等场景），直接使用
+    info "项目目录已有代码，跳过克隆"
+    cd "$PROJECT_DIR"
 else
     info "克隆仓库: $REPO_URL"
-    git clone "$REPO_URL" "$PROJECT_DIR"
-    cd "$PROJECT_DIR"
-    log "代码克隆完成"
+    if ! git clone "$REPO_URL" "$PROJECT_DIR" 2>/dev/null; then
+        # git clone 失败，检查是否是手动部署
+        if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/backend/app.py" ]; then
+            warn "git clone 失败，但目录中已有代码，继续安装"
+            cd "$PROJECT_DIR"
+        else
+            err "git clone 失败且目录中无代码"
+            err "请手动下载: git clone $REPO_URL $PROJECT_DIR"
+            err "或解压项目 zip 到 $PROJECT_DIR 后重新运行此脚本"
+            exit 1
+        fi
+    else
+        cd "$PROJECT_DIR"
+        log "代码克隆完成"
+    fi
 fi
 
 # ========================================================
@@ -191,9 +202,9 @@ fi
 
 # ── Nginx ───────────────────────────────────────────
 info "配置 Nginx (${SERVICE_SLUG})..."
-cat > "$NGINX_CONF" << 'NGINXEOF'
+cat > "$NGINX_CONF" << NGINXEOF
 server {
-    listen 8083;
+    listen ${NGINX_PORT};
     server_name _;
 
     proxy_read_timeout 360s;
@@ -204,10 +215,10 @@ server {
     chunked_transfer_encoding on;
 
     location / {
-        proxy_pass http://127.0.0.1:50123;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://127.0.0.1:${FLASK_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
 NGINXEOF
