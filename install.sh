@@ -36,6 +36,26 @@ NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
 NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
 SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_SLUG}.service"
 
+# ── 路径安全校验 ──────────────────────────────────────
+# 防止路径穿越攻击（如 AIPIC_DIR=/var/www/../../../etc/nginx）
+RESOLVED_DIR="$(realpath -m "$PROJECT_DIR" 2>/dev/null || echo "$PROJECT_DIR")"
+case "$RESOLVED_DIR" in
+    /|/etc|/etc/*|/var|/home|/home/*|/root|/usr|/usr/*|/opt|/tmp|/bin|/sbin|/boot|/dev|/proc|/sys|/run|/var/log|/var/run|/var/lock)
+        err "非法的安装目录: $PROJECT_DIR → $RESOLVED_DIR"
+        err "请设置 AIPIC_DIR 为 /var/www/ 下的子目录"
+        exit 1 ;;
+esac
+if [ "$(dirname "$RESOLVED_DIR")" = "/" ]; then
+    err "非法的安装目录: $PROJECT_DIR（不能为顶级目录的子目录）"
+    err "请设置 AIPIC_DIR 为 /var/www/ 下的子目录"
+    exit 1
+fi
+PROJECT_DIR="$RESOLVED_DIR"
+SERVICE_SLUG="$(basename "$PROJECT_DIR")"
+NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
+NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
+SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_SLUG}.service"
+
 # ── 安装日志持久化 ──
 mkdir -p /var/log
 exec > >(tee -a /var/log/${SERVICE_SLUG}-install.log) 2>&1

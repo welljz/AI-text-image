@@ -32,6 +32,27 @@ NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
 NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
 SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_SLUG}.service"
 
+# ── 路径安全校验 ──────────────────────────────────────
+# 防止路径穿越攻击（如 AIPIC_DIR=/var/www/../../../etc/nginx）
+RESOLVED_DIR="$(realpath -m "$PROJECT_DIR" 2>/dev/null || echo "$PROJECT_DIR")"
+case "$RESOLVED_DIR" in
+    /|/etc|/etc/*|/var|/home|/home/*|/root|/usr|/usr/*|/opt|/tmp|/bin|/sbin|/boot|/dev|/proc|/sys|/run|/var/log|/var/run|/var/lock)
+        err "非法的安装目录: $PROJECT_DIR → $RESOLVED_DIR"
+        err "请设置 AIPIC_DIR 为 /var/www/ 下的子目录"
+        exit 1 ;;
+esac
+# 必须至少有二级路径（如 /var/www/xxx）
+if [ "$(dirname "$RESOLVED_DIR")" = "/" ]; then
+    err "非法的安装目录: $PROJECT_DIR（不能为顶级目录的子目录）"
+    err "请设置 AIPIC_DIR 为 /var/www/ 下的子目录"
+    exit 1
+fi
+PROJECT_DIR="$RESOLVED_DIR"
+SERVICE_SLUG="$(basename "$PROJECT_DIR")"
+NGINX_CONF="/etc/nginx/sites-available/${SERVICE_SLUG}"
+NGINX_LINK="/etc/nginx/sites-enabled/${SERVICE_SLUG}"
+SYSTEMD_SERVICE="/etc/systemd/system/${SERVICE_SLUG}.service"
+
 # ── 检查 ──────────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
     err "请用 root 用户运行: sudo bash uninstall.sh"
@@ -131,13 +152,14 @@ fi
 title "4/5  移除系统用户"
 # ========================================================
 if id "$SERVICE_SLUG" &>/dev/null; then
-    # 仅删除 install.sh 创建的 nologin 用户
+    # 仅删除 install.sh 创建的 nologin + 无家目录用户
     USER_SHELL=$(getent passwd "$SERVICE_SLUG" | cut -d: -f7)
-    if [ "$USER_SHELL" = "/usr/sbin/nologin" ]; then
+    USER_HOME=$(getent passwd "$SERVICE_SLUG" | cut -d: -f6)
+    if [ "$USER_SHELL" = "/usr/sbin/nologin" ] && { [ "$USER_HOME" = "/nonexistent" ] || [ ! -d "$USER_HOME" ]; }; then
         userdel "$SERVICE_SLUG" 2>/dev/null || warn "无法删除用户 ${SERVICE_SLUG}（可能被占用）"
         log "已移除系统用户 ${SERVICE_SLUG}"
     else
-        warn "用户 ${SERVICE_SLUG} 非安装脚本创建 (shell: ${USER_SHELL})，跳过"
+        warn "用户 ${SERVICE_SLUG} 非安装脚本创建 (shell: ${USER_SHELL}, home: ${USER_HOME})，跳过"
     fi
 else
     log "系统用户 ${SERVICE_SLUG} 不存在，跳过"
