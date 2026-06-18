@@ -78,7 +78,7 @@ cd frontend && pnpm install && pnpm dev   # → localhost:5173
 sudo cp -r /var/www/aipic /var/www/aipic-test
 
 # 2. 指定测试目录和端口运行安装
-sudo AIPIC_DIR=/var/www/aipic-test AIPIC_PORT=8084 bash /var/www/aipic/install.sh
+sudo AIPIC_DIR=/var/www/aipic-test AIPIC_PORT=8084 AIPIC_FLASK=50124 bash /var/www/aipic/install.sh
 
 # 3. 浏览器验证 http://localhost:8084
 
