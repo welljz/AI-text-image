@@ -492,6 +492,7 @@ fi
 log "前端依赖安装完成"
 
 info "构建前端 (pnpm build)..."
+rm -rf dist 2>/dev/null || true
 if ! pnpm build; then
     err "前端构建失败"
     err "请手动执行: cd $PROJECT_DIR/frontend && pnpm build"
@@ -723,6 +724,7 @@ fi
 log "前端依赖已更新"
 
 echo "[4/4] 构建前端..."
+rm -rf dist 2>/dev/null || true
 if ! pnpm build 2>&1; then
     err "前端构建失败"
     exit 1
