@@ -535,6 +535,7 @@ Type=simple
 User=${APP_USER}
 WorkingDirectory=$PROJECT_DIR
 Environment=FLASK_PORT=${FLASK_PORT}
+Environment=HOME=${PROJECT_DIR}
 ExecStart=/usr/local/bin/uv run python backend/app.py
 Restart=always
 RestartSec=5
