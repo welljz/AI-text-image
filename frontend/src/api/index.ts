@@ -969,6 +969,16 @@ export async function getDomain(): Promise<DomainResponse> {
   }
 }
 
+/** 申请 SSL 证书 */
+export async function applySSLCert(email: string): Promise<DomainResponse> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/domain/cert`, { email })
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '证书申请失败' }
+  }
+}
+
 /** 保存域名配置 */
 export async function setDomain(domain: string): Promise<DomainResponse> {
   try {

@@ -113,6 +113,33 @@
             </button>
           </div>
         </form>
+
+        <!-- SSL 证书 -->
+        <div v-if="domainInput" class="ssl-section">
+          <div class="ssl-divider"></div>
+          <h3 class="ssl-title">HTTPS 证书</h3>
+          <p class="section-desc">免费申请 Let's Encrypt SSL 证书，启用 HTTPS 访问</p>
+
+          <form @submit.prevent="handleApplyCert" class="ssl-form">
+            <div class="form-row">
+              <input
+                v-model="certEmail"
+                type="email"
+                class="input"
+                placeholder="邮箱（用于证书通知）"
+                :disabled="certApplying"
+              />
+            </div>
+
+            <div v-if="certError" class="error-msg">{{ certError }}</div>
+            <div v-if="certSuccess" class="success-msg">{{ certSuccess }}</div>
+
+            <button type="submit" class="btn btn-secondary" :disabled="certApplying || !certEmail">
+              <span v-if="certApplying" class="spinner-sm"></span>
+              <span v-else>🔒 申请 SSL 证书</span>
+            </button>
+          </form>
+        </div>
       </div>
 
       <!-- 账户 Tab：账户安全 -->
@@ -285,7 +312,7 @@ import {
 } from '../composables/useProviderForm'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/toast'
-import { checkUpdate, doUpdate, getUpdateStatus, restartService, getDomain, setDomain } from '../api'
+import { checkUpdate, doUpdate, getUpdateStatus, restartService, getDomain, setDomain, applySSLCert } from '../api'
 import type { CheckUpdateResponse } from '../api'
 
 /**
@@ -447,10 +474,32 @@ async function handleSaveDomain() {
   savingDomain.value = false
 
   if (res.success) {
-    domainSuccess.value = '域名已保存'
-    toast.success('域名已保存')
+    domainSuccess.value = res.message || '域名已保存'
+    toast.success(res.message || '域名已保存')
   } else {
     domainError.value = res.error || '保存失败'
+  }
+}
+
+// SSL 证书
+const certEmail = ref('')
+const certApplying = ref(false)
+const certError = ref('')
+const certSuccess = ref('')
+
+async function handleApplyCert() {
+  certError.value = ''
+  certSuccess.value = ''
+  certApplying.value = true
+
+  const res = await applySSLCert(certEmail.value.trim())
+  certApplying.value = false
+
+  if (res.success) {
+    certSuccess.value = res.message || '证书申请成功'
+    toast.success(res.message || '证书申请成功')
+  } else {
+    certError.value = res.error || '申请失败'
   }
 }
 
@@ -678,6 +727,31 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* SSL 证书 */
+.ssl-section {
+  margin-top: 24px;
+}
+
+.ssl-divider {
+  border-top: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.ssl-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-main);
+}
+
+.ssl-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+  margin-top: 12px;
 }
 
 .success-msg {

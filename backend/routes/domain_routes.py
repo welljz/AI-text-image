@@ -101,6 +101,52 @@ def create_domain_blueprint():
                 'error': f'保存域名配置失败: {str(e)}'
             }), 500
 
+    @domain_bp.route('/domain/cert', methods=['POST'])
+    def apply_cert():
+        """申请 SSL 证书（Let's Encrypt）"""
+        try:
+            data = request.get_json()
+            if data is None:
+                return jsonify({'success': False, 'error': '请求数据格式错误'}), 400
+
+            email = data.get('email', '').strip()
+            domain = _read_app_settings().get('domain', '').strip()
+
+            if not domain:
+                return jsonify({'success': False, 'error': '请先设置域名'}), 400
+            if not email:
+                return jsonify({'success': False, 'error': '请输入邮箱'}), 400
+
+            if not Path(NGINX_HELPER).exists():
+                return jsonify({
+                    'success': False,
+                    'error': f'Nginx helper 不存在，请重新运行 install.sh'
+                }), 400
+
+            result = subprocess.run(
+                ['sudo', NGINX_HELPER, 'cert', domain, email],
+                capture_output=True, text=True, timeout=120
+            )
+
+            if result.returncode == 0:
+                logger.info(f"SSL 证书申请成功: {domain}")
+                return jsonify({
+                    'success': True,
+                    'message': f'SSL 证书已生效: https://{domain}'
+                })
+            else:
+                logger.warning(f"SSL 证书申请失败: {result.stdout.strip()} {result.stderr.strip()}")
+                return jsonify({
+                    'success': False,
+                    'error': '证书申请失败，请确认域名 DNS 已正确解析到本服务器'
+                }), 500
+
+        except subprocess.TimeoutExpired:
+            return jsonify({'success': False, 'error': '证书申请超时，请重试'}), 500
+        except Exception as e:
+            logger.error(f"SSL 证书申请异常: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     return domain_bp
 
 

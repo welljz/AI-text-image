@@ -1,6 +1,6 @@
 #!/bin/bash
 # aipic-nginx: 域名绑定 Nginx 配置 helper
-# 用法: aipic-nginx set <domain>  |  aipic-nginx clear
+# 用法: aipic-nginx set <domain> | aipic-nginx cert <domain> <email> | aipic-nginx clear
 set -e
 PROJECT_DIR="__PROJECT_DIR__"
 NGX_ENV="${PROJECT_DIR}/nginx_env.yaml"
@@ -81,6 +81,29 @@ SERVEREOF
             exit 1
         fi
         ;;
+    cert)
+        EMAIL="${3:-}"
+        if [ -z "$DOMAIN" ] || [ -z "$EMAIL" ]; then
+            echo "[✗] 用法: $0 cert <domain> <email>"
+            exit 1
+        fi
+        DOMAIN=$(echo "$DOMAIN" | sed -e 's|^https\{0,1\}://||' -e 's|/.*||')
+        echo "申请 SSL 证书: $DOMAIN (邮箱: $EMAIL)"
+
+        CERTBOT=$(which certbot 2>/dev/null || echo '')
+        if [ -z "$CERTBOT" ]; then
+            echo "[✗] certbot 未安装，请先运行: sudo apt install certbot python3-certbot-nginx -y"
+            exit 1
+        fi
+
+        $CERTBOT --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$EMAIL" --redirect 2>&1
+        if [ $? -eq 0 ]; then
+            echo "[✓] SSL 证书申请成功: https://${DOMAIN}"
+        else
+            echo "[✗] SSL 证书申请失败，请检查域名 DNS 是否正确解析"
+            exit 1
+        fi
+        ;;
     clear)
         echo "清除域名配置..."
         if [ -f "$CONF_FILE" ]; then
@@ -93,7 +116,7 @@ SERVEREOF
         fi
         ;;
     *)
-        echo "用法: $0 {set <domain> | clear}"
+        echo "用法: $0 {set <domain> | cert <domain> <email> | clear}"
         exit 1
         ;;
 esac

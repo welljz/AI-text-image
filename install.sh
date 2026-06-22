@@ -660,6 +660,15 @@ nginx_bin: ${NGINX_BIN}
 flask_port: ${FLASK_PORT}
 app_port: ${NGINX_PORT}
 NGXENVEOF
+
+# ── 安装 certbot（SSL 证书）──
+if ! has certbot; then
+	ensure_pkg certbot
+	ensure_pkg python3-certbot-nginx
+	log "certbot 已安装"
+else
+	log "certbot 已存在，跳过"
+fi
 	log "Nginx 环境信息已保存: ${PROJECT_DIR}/nginx_env.yaml"
 # ── 新 Nginx 配置生效后，安全清理旧版 ──
 if [ "$NEED_REDINK_CLEANUP" = 1 ]; then
