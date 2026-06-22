@@ -492,17 +492,47 @@ async function startUpdate() {
   }
 
   // 轮询更新进度
+  let pollCount = 0
+  let consecutiveErrors = 0
+  const MAX_POLLS = 80       // 最长 2 分钟
+  const MAX_CONSECUTIVE_ERRORS = 5
+
   _updatePollTimer = setInterval(async () => {
+    pollCount++
     const status = await getUpdateStatus()
+
+    if (!status.success || status.error) {
+      consecutiveErrors++
+    } else {
+      consecutiveErrors = 0
+    }
+
     if (status.log) {
       updateLog.value = status.log
     }
+
     if (status.done) {
       updating.value = false
       updateDone.value = true
       if (status.error) {
         updateError.value = '更新过程中出现错误，请查看日志'
       }
+      if (_updatePollTimer) clearInterval(_updatePollTimer)
+      return
+    }
+
+    // 连续获取状态失败，可能服务已中断
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      updating.value = false
+      updateError.value = '无法获取更新状态（服务可能已中断），请稍后刷新页面查看'
+      if (_updatePollTimer) clearInterval(_updatePollTimer)
+      return
+    }
+
+    // 超时
+    if (pollCount >= MAX_POLLS) {
+      updating.value = false
+      updateError.value = '更新超时，请刷新页面后重试'
       if (_updatePollTimer) clearInterval(_updatePollTimer)
     }
   }, 1500)

@@ -152,8 +152,10 @@ def _validate_config_on_startup(logger):
 
 if __name__ == '__main__':
     app = create_app()
+    frontend_dist = Path(__file__).parent.parent / 'frontend' / 'dist'
     app.run(
         host=Config.HOST,
         port=Config.PORT,
-        debug=Config.DEBUG
+        debug=Config.DEBUG,
+        use_reloader=not frontend_dist.exists()  # 生产环境（有前端构建产物）禁用 reloader，避免 git pull 后意外自动重启
     )

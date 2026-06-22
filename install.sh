@@ -725,7 +725,6 @@ fi
 log "前端依赖已更新"
 
 echo "[4/4] 构建前端..."
-rm -rf dist 2>/dev/null || true
 if ! pnpm build 2>&1; then
     err "前端构建失败"
     exit 1
