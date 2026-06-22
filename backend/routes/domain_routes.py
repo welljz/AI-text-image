@@ -54,9 +54,10 @@ def create_domain_blueprint():
             config['domain'] = domain
             _write_app_settings(config)
 
-            # 清除 Config 缓存，使 CORS 生效
+            # 清除 Config 缓存并同步 CORS，使域名即时生效无需重启
             from backend.config import Config
             Config.reload_domain_config()
+            Config.sync_cors_origins()
 
             logger.info(f"域名已更新: {domain or '(未设置)'}")
 

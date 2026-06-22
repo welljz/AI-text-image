@@ -33,10 +33,29 @@ const iconMap: Record<string, string> = {
 }
 
 function copyMessage(msg: string) {
-  navigator.clipboard.writeText(msg).then(() => {
-    const item = toasts.value.at(-1)
-    // 短暂闪烁反馈由 CSS :active 处理
-  }).catch(() => {})
+  // 优先用 Clipboard API（HTTPS / localhost）
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(msg).catch(() => fallbackCopy(msg))
+  } else {
+    fallbackCopy(msg)
+  }
+}
+
+function fallbackCopy(text: string) {
+  const el = document.createElement('textarea')
+  el.value = text
+  el.style.position = 'fixed'
+  el.style.left = '-9999px'
+  el.style.top = '-9999px'
+  document.body.appendChild(el)
+  el.focus()
+  el.select()
+  try {
+    document.execCommand('copy')
+  } catch (_) {
+    // 复制失败，静默
+  }
+  document.body.removeChild(el)
 }
 </script>
 

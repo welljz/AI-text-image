@@ -177,17 +177,17 @@ class Config:
         return config.get('domain', '').strip()
 
     @classmethod
-    def get_cors_origins_list(cls):
-        """获取 CORS origins 列表（包含配置的域名）"""
-        origins = ['http://localhost:5173', 'http://localhost:3000']
+    def sync_cors_origins(cls):
+        """同步 CORS_ORIGINS 列表（根据当前域名配置）"""
+        base = ['http://localhost:5173', 'http://localhost:3000']
         domain = cls.get_domain()
         if domain:
             if domain.startswith('http://') or domain.startswith('https://'):
-                origins.append(domain)
+                base.append(domain)
             else:
-                origins.append(f'http://{domain}')
-                origins.append(f'https://{domain}')
-        return origins
+                base.append(f'http://{domain}')
+                base.append(f'https://{domain}')
+        cls.CORS_ORIGINS = base
 
     @classmethod
     def reload_domain_config(cls):
