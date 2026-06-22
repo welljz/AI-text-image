@@ -55,7 +55,6 @@ def create_app():
 
     app.config.from_object(Config)
 
-    Config.sync_cors_origins()
     CORS(app, resources={
         r"/api/*": {
             "origins": Config.CORS_ORIGINS,

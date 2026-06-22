@@ -15,7 +15,6 @@ class Config:
 
     _image_providers_config = None
     _text_providers_config = None
-    _domain_config = None
 
     @classmethod
     def load_image_providers_config(cls):
@@ -148,57 +147,8 @@ class Config:
         return provider_config
 
     @classmethod
-    def load_domain_config(cls):
-        """加载域名配置"""
-        if cls._domain_config is not None:
-            return cls._domain_config
-
-        config_path = Path(__file__).parent.parent / 'app_settings.yaml'
-        logger.debug(f"加载域名配置: {config_path}")
-
-        if not config_path.exists():
-            cls._domain_config = {'domain': ''}
-            return cls._domain_config
-
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                cls._domain_config = yaml.safe_load(f) or {'domain': ''}
-            logger.debug(f"域名配置加载成功: {cls._domain_config.get('domain', '')}")
-        except yaml.YAMLError as e:
-            logger.error(f"域名配置文件 YAML 格式错误: {e}")
-            cls._domain_config = {'domain': ''}
-
-        return cls._domain_config
-
-    @classmethod
-    def get_domain(cls):
-        """获取当前配置的域名"""
-        config = cls.load_domain_config()
-        return config.get('domain', '').strip()
-
-    @classmethod
-    def sync_cors_origins(cls):
-        """同步 CORS_ORIGINS 列表（根据当前域名配置）"""
-        base = ['http://localhost:5173', 'http://localhost:3000']
-        domain = cls.get_domain()
-        if domain:
-            if domain.startswith('http://') or domain.startswith('https://'):
-                base.append(domain)
-            else:
-                base.append(f'http://{domain}')
-                base.append(f'https://{domain}')
-        cls.CORS_ORIGINS = base
-
-    @classmethod
-    def reload_domain_config(cls):
-        """重新加载域名配置（清除缓存）"""
-        logger.info("清除域名配置缓存")
-        cls._domain_config = None
-
-    @classmethod
     def reload_config(cls):
         """重新加载配置（清除缓存）"""
         logger.info("重新加载所有配置...")
         cls._image_providers_config = None
         cls._text_providers_config = None
-        cls._domain_config = None

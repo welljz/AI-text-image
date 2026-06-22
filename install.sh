@@ -655,26 +655,6 @@ else
     fi
 fi
 
-
-	# ── 保存 Nginx 环境信息，供 Web 域名绑定使用 ──
-	cat > "${PROJECT_DIR}/nginx_env.yaml" << NGXENVEOF
-conf_dir: ${NGINX_CONF_DIR}
-mode: ${NGINX_MODE}
-link_dir: ${NGINX_LINK_DIR:-}
-nginx_bin: ${NGINX_BIN}
-flask_port: ${FLASK_PORT}
-app_port: ${NGINX_PORT}
-NGXENVEOF
-
-# ── 安装 certbot（SSL 证书）──
-if ! has certbot; then
-	ensure_pkg certbot
-	ensure_pkg python3-certbot-nginx
-	log "certbot 已安装"
-else
-	log "certbot 已存在，跳过"
-fi
-	log "Nginx 环境信息已保存: ${PROJECT_DIR}/nginx_env.yaml"
 # ── 新 Nginx 配置生效后，安全清理旧版 ──
 if [ "$NEED_REDINK_CLEANUP" = 1 ]; then
     info "停止旧版 redink 服务..."
@@ -720,18 +700,6 @@ if [ ! -f "/etc/sudoers.d/${SERVICE_SLUG}" ]; then
     log "sudoers 规则已添加: ${SERVICE_SLUG}"
 fi
 
-# ── Nginx 域名配置 helper 脚本 ──
-cp "${PROJECT_DIR}/scripts/${SERVICE_SLUG}-nginx.sh" "/usr/local/bin/${SERVICE_SLUG}-nginx"
-sed -i "s|__PROJECT_DIR__|${PROJECT_DIR}|g" "/usr/local/bin/${SERVICE_SLUG}-nginx"
-chmod 755 "/usr/local/bin/${SERVICE_SLUG}-nginx"
-log "Nginx helper 脚本已创建: /usr/local/bin/${SERVICE_SLUG}-nginx"
-
-# ── sudoers: 允许调用 nginx helper ──
-if [ ! -f "/etc/sudoers.d/${SERVICE_SLUG}-nginx" ]; then
-	echo "${APP_USER} ALL=(root) NOPASSWD: /usr/local/bin/${SERVICE_SLUG}-nginx" > "/etc/sudoers.d/${SERVICE_SLUG}-nginx"
-	chmod 440 "/etc/sudoers.d/${SERVICE_SLUG}-nginx"
-	log "sudoers 规则已添加: ${SERVICE_SLUG}-nginx"
-fi
 # ── 一键更新脚本 ──
 cat > /usr/local/bin/${SERVICE_SLUG}-update << 'UPDEOF'
 #!/bin/bash
