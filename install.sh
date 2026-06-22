@@ -557,8 +557,13 @@ if ss -tlnp 2>/dev/null | grep -qE ":${FLASK_PORT}\s"; then
     exit 1
 fi
 if ss -tlnp 2>/dev/null | grep -qE ":${NGINX_PORT}\s"; then
-    err "Nginx 端口 ${NGINX_PORT} 已被占用，请设置 AIPIC_PORT 环境变量后重试"
-    exit 1
+    # 如果已有同名 Nginx 配置文件，说明是重装，跳过端口检查
+    if [ -f "${NGINX_CONF_DIR}/${SERVICE_SLUG}.conf" ]; then
+        warn "Nginx 端口 ${NGINX_PORT} 已被占用（检测到已有 ${SERVICE_SLUG} 配置，推测为重装，继续）"
+    else
+        err "Nginx 端口 ${NGINX_PORT} 已被占用，请设置 AIPIC_PORT 环境变量后重试"
+        exit 1
+    fi
 fi
 
 _NGINX_SKIPPED=0
