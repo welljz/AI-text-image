@@ -553,8 +553,13 @@ fi
 # ── Nginx ───────────────────────────────────────────
 # ── 端口冲突检查 ──
 if ss -tlnp 2>/dev/null | grep -qE ":${FLASK_PORT}\s"; then
-    err "Flask 端口 ${FLASK_PORT} 已被占用，请设置 AIPIC_FLASK 环境变量后重试"
-    exit 1
+    # 如果已有同名 systemd 服务，说明是重装，跳过端口检查
+    if [ -f "/etc/systemd/system/${SERVICE_SLUG}.service" ]; then
+        warn "Flask 端口 ${FLASK_PORT} 已被占用（检测到已有 ${SERVICE_SLUG} 服务，推测为重装，继续）"
+    else
+        err "Flask 端口 ${FLASK_PORT} 已被占用，请设置 AIPIC_FLASK 环境变量后重试"
+        exit 1
+    fi
 fi
 if ss -tlnp 2>/dev/null | grep -qE ":${NGINX_PORT}\s"; then
     # 如果已有同名 Nginx 配置文件，说明是重装，跳过端口检查
