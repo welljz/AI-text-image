@@ -11,6 +11,16 @@
     </div>
 
     <div v-else class="settings-container">
+      <!-- Tab 导航 -->
+      <div class="tabs-container">
+        <div class="tab-item" :class="{ active: activeTab === 'providers' }" @click="activeTab = 'providers'">服务商</div>
+        <div class="tab-item" :class="{ active: activeTab === 'site' }" @click="activeTab = 'site'">站点</div>
+        <div class="tab-item" :class="{ active: activeTab === 'account' }" @click="activeTab = 'account'">账户</div>
+        <div class="tab-item" :class="{ active: activeTab === 'system' }" @click="activeTab = 'system'">系统</div>
+      </div>
+
+      <!-- 服务商 Tab：文本 + 图片 -->
+      <template v-if="activeTab === 'providers'">
       <!-- 文本生成配置 -->
       <div class="card">
         <div class="section-header">
@@ -64,9 +74,48 @@
           @test="testImageProviderInList"
         />
       </div>
+      </template>
 
-      <!-- 账户安全 -->
-      <div class="card">
+      <!-- 站点 Tab：域名绑定 -->
+      <div v-if="activeTab === 'site'" class="card">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">域名绑定</h2>
+            <p class="section-desc">配置访问域名，用于 CORS 跨域和系统访问地址</p>
+          </div>
+        </div>
+
+        <form @submit.prevent="handleSaveDomain" class="domain-form">
+          <div class="form-row">
+            <input
+              v-model="domainInput"
+              type="text"
+              class="input"
+              placeholder="例如：example.com"
+              :disabled="savingDomain"
+            />
+          </div>
+          <p v-if="!domainInput" class="form-hint">留空则不限制域名，仅允许本地访问</p>
+
+          <div v-if="domainInput" class="access-url-info">
+            <span class="url-label">访问地址：</span>
+            <code class="access-url">{{ domainInput.startsWith('http') ? domainInput : 'https://' + domainInput }}</code>
+          </div>
+
+          <div v-if="domainError" class="error-msg">{{ domainError }}</div>
+          <div v-if="domainSuccess" class="success-msg">{{ domainSuccess }}</div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" :disabled="savingDomain">
+              <span v-if="savingDomain" class="spinner-sm"></span>
+              <span v-else>保存域名</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 账户 Tab：账户安全 -->
+      <div v-if="activeTab === 'account'" class="card">
         <div class="section-header">
           <div>
             <h2 class="section-title">账户安全</h2>
@@ -122,8 +171,8 @@
         </form>
       </div>
 
-      <!-- 系统更新 -->
-      <div class="card">
+      <!-- 系统 Tab：系统更新 -->
+      <div v-if="activeTab === 'system'" class="card">
         <div class="section-header">
           <div>
             <h2 class="section-title">系统更新</h2>
@@ -235,7 +284,7 @@ import {
 } from '../composables/useProviderForm'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/toast'
-import { checkUpdate, doUpdate, getUpdateStatus, restartService } from '../api'
+import { checkUpdate, doUpdate, getUpdateStatus, restartService, getDomain, setDomain } from '../api'
 import type { CheckUpdateResponse } from '../api'
 
 /**
@@ -296,7 +345,11 @@ const {
 
 onMounted(() => {
   loadConfig()
+  loadDomain()
 })
+
+// Tab 切换
+const activeTab = ref<'providers' | 'site' | 'account' | 'system'>('providers')
 
 // ── 账户修改 ──────────────────────────────────────────
 const authStore = useAuthStore()
@@ -368,6 +421,35 @@ async function handleChangeAccount() {
     }
   } else {
     pwdError.value = result.error || '修改失败'
+  }
+}
+
+// ── 域名绑定 ──────────────────────────────────────────
+const domainInput = ref('')
+const savingDomain = ref(false)
+const domainError = ref('')
+const domainSuccess = ref('')
+
+async function loadDomain() {
+  const res = await getDomain()
+  if (res.success) {
+    domainInput.value = res.domain || ''
+  }
+}
+
+async function handleSaveDomain() {
+  domainError.value = ''
+  domainSuccess.value = ''
+  savingDomain.value = true
+
+  const res = await setDomain(domainInput.value.trim())
+  savingDomain.value = false
+
+  if (res.success) {
+    domainSuccess.value = '域名已保存'
+    toast.success('域名已保存')
+  } else {
+    domainError.value = res.error || '保存失败'
   }
 }
 
@@ -517,6 +599,50 @@ onMounted(() => {
 
 .password-form .form-row {
   width: 100%;
+}
+
+/* 域名绑定 */
+.domain-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 500px;
+}
+
+.form-hint {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: -4px 0 0 0;
+}
+
+.access-url-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--primary-light);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+.url-label {
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.access-url {
+  font-family: monospace;
+  font-size: 14px;
+  color: var(--primary);
+  word-break: break-all;
+  background: transparent;
+  padding: 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .success-msg {

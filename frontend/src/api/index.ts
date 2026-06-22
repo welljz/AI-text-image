@@ -950,6 +950,35 @@ export async function testConnection(config: {
   return response.data
 }
 
+// ── 域名绑定 API ──────────────────────────────────────
+
+export interface DomainResponse {
+  success: boolean
+  domain?: string
+  error?: string
+  message?: string
+}
+
+/** 获取当前域名配置 */
+export async function getDomain(): Promise<DomainResponse> {
+  try {
+    const res = await axios.get(`${API_BASE_URL}/domain`)
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '获取域名配置失败' }
+  }
+}
+
+/** 保存域名配置 */
+export async function setDomain(domain: string): Promise<DomainResponse> {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/domain`, { domain })
+    return res.data
+  } catch (err: any) {
+    return err.response?.data || { success: false, error: '保存域名配置失败' }
+  }
+}
+
 // ==================== 内容生成 API（标题、文案、标签） ====================
 
 export interface ContentResponse {
