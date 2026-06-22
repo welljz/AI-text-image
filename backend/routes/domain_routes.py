@@ -7,6 +7,7 @@
 """
 
 import logging
+import subprocess
 from pathlib import Path
 import yaml
 from flask import Blueprint, request, jsonify
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(__file__).parent.parent.parent
 APP_SETTINGS_PATH = CONFIG_DIR / 'app_settings.yaml'
+SERVICE_SLUG = CONFIG_DIR.name
+NGINX_HELPER = f'/usr/local/bin/{SERVICE_SLUG}-nginx'
 
 
 def create_domain_blueprint():
@@ -59,11 +62,35 @@ def create_domain_blueprint():
             Config.reload_domain_config()
             Config.sync_cors_origins()
 
+            # 更新 Nginx 配置（80 端口域名 server block）
+            nginx_msg = ''
+            if Path(NGINX_HELPER).exists():
+                try:
+                    if domain:
+                        result = subprocess.run(
+                            ['sudo', NGINX_HELPER, 'set', domain],
+                            capture_output=True, text=True, timeout=30
+                        )
+                    else:
+                        result = subprocess.run(
+                            ['sudo', NGINX_HELPER, 'clear'],
+                            capture_output=True, text=True, timeout=30
+                        )
+                    if result.returncode == 0:
+                        nginx_msg = '，Nginx 已更新'
+                        logger.info(f"Nginx 域名配置已更新: {result.stdout.strip()}")
+                    else:
+                        nginx_msg = '，但 Nginx 更新失败（请检查服务器配置）'
+                        logger.warning(f"Nginx 更新失败: {result.stderr.strip()}")
+                except Exception as e:
+                    nginx_msg = '，Nginx 配置未更新（helper 执行异常）'
+                    logger.warning(f"调用 Nginx helper 失败: {e}")
+
             logger.info(f"域名已更新: {domain or '(未设置)'}")
 
             return jsonify({
                 'success': True,
-                'message': '域名已保存',
+                'message': f'域名已保存{nginx_msg}',
                 'domain': domain
             })
 

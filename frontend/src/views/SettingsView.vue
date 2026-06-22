@@ -81,7 +81,7 @@
         <div class="section-header">
           <div>
             <h2 class="section-title">域名绑定</h2>
-            <p class="section-desc">配置访问域名，用于 CORS 跨域和系统访问地址</p>
+            <p class="section-desc">配置后自动设置 Nginx 80 端口，可直接通过域名访问（无需加端口号）</p>
           </div>
         </div>
 
@@ -95,12 +95,13 @@
               :disabled="savingDomain"
             />
           </div>
-          <p v-if="!domainInput" class="form-hint">留空则不限制域名，仅允许本地访问</p>
+          <p v-if="!domainInput" class="form-hint">留空则仅可通过 IP:8083 访问</p>
 
           <div v-if="domainInput" class="access-url-info">
             <span class="url-label">访问地址：</span>
-            <code class="access-url">{{ domainInput.startsWith('http') ? domainInput : 'https://' + domainInput }}</code>
+            <code class="access-url">http://{{ domainInput.replace(/^https?:\/\//, '') }}</code>
           </div>
+          <p v-if="domainInput" class="form-hint dns-hint">确保域名 DNS 已解析到服务器 IP，保存后自动生效</p>
 
           <div v-if="domainError" class="error-msg">{{ domainError }}</div>
           <div v-if="domainSuccess" class="success-msg">{{ domainSuccess }}</div>
@@ -643,6 +644,10 @@ onMounted(() => {
   font-size: 13px;
   color: var(--text-sub);
   margin: -4px 0 0 0;
+}
+
+.dns-hint {
+  color: var(--primary);
 }
 
 .access-url-info {
